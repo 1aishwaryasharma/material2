@@ -1,14 +1,13 @@
-import {DOWN_ARROW, TAB, UP_ARROW, LEFT_ARROW, RIGHT_ARROW} from '@angular/cdk/keycodes';
-import {take} from 'rxjs/operators';
+import {DOWN_ARROW, LEFT_ARROW, RIGHT_ARROW, TAB, UP_ARROW} from '@angular/cdk/keycodes';
+import {createKeyboardEvent} from '@angular/cdk/testing/private';
 import {QueryList} from '@angular/core';
 import {fakeAsync, tick} from '@angular/core/testing';
-import {createKeyboardEvent} from '@angular/cdk/testing';
+import {Subject} from 'rxjs';
+import {take} from 'rxjs/operators';
+import {FocusOrigin} from '../focus-monitor/focus-monitor';
 import {ActiveDescendantKeyManager} from './activedescendant-key-manager';
 import {FocusKeyManager} from './focus-key-manager';
-import {ListKeyManager} from './list-key-manager';
-import {FocusOrigin} from '../focus-monitor/focus-monitor';
-import {Subject} from 'rxjs';
-
+import {ListKeyManager, ListKeyManagerModifierKey, ListKeyManagerOption} from './list-key-manager';
 
 class FakeFocusable {
   /** Whether the item is disabled or not. */
@@ -33,10 +32,16 @@ class FakeQueryList<T> extends QueryList<T> {
   set length(_) { /* Empty setter for base class constructor */  }
   get first() { return this.items[0]; }
   toArray() { return this.items; }
-  some() { return this.items.some.apply(this.items, arguments); }
+  some(...args: [(value: T, index: number, array: T[]) => unknown, any?]) {
+    return this.items.some(...args);
+  }
   notifyOnChanges() { this.changes.next(this); }
 }
 
+interface KeyEventTestContext {
+  nextKeyEvent: KeyboardEvent;
+  prevKeyEvent: KeyboardEvent;
+}
 
 describe('Key managers', () => {
   let itemList: FakeQueryList<any>;
@@ -62,7 +67,14 @@ describe('Key managers', () => {
   });
 
   describe('ListKeyManager', () => {
-    let keyManager: ListKeyManager<FakeFocusable>;
+    // We have a spy on the `setActiveItem` method of the list key manager. That method has
+    // multiple overloads and TypeScript is unable to infer the right parameters when calls are
+    // checked using jasmine's `hasBeenCalledWith` matcher. We work around this by explicitly
+    // specifying the overload signature that should be used.
+    // TODO: remove if https://github.com/DefinitelyTyped/DefinitelyTyped/issues/42455 is solved.
+    let keyManager: Omit<ListKeyManager<FakeFocusable>, 'setActiveItem'> & {
+      setActiveItem(index: number): void;
+    };
 
     beforeEach(() => {
       itemList.items = [
@@ -89,11 +101,30 @@ describe('Key managers', () => {
       expect(keyManager.activeItem!.getLabel()).toBe('one');
     });
 
+    it('should start off the activeItem as null', () => {
+      expect(new ListKeyManager([]).activeItem).toBeNull();
+    });
+
+    it('should set the activeItem to null if an invalid index is passed in', () => {
+      keyManager.setActiveItem(1337);
+      expect(keyManager.activeItem).toBeNull();
+    });
+
     describe('Key events', () => {
 
       it('should emit tabOut when the tab key is pressed', () => {
         const spy = jasmine.createSpy('tabOut spy');
         keyManager.tabOut.pipe(take(1)).subscribe(spy);
+        keyManager.onKeydown(fakeKeyEvents.tab);
+
+        expect(spy).toHaveBeenCalled();
+      });
+
+      it('should emit tabOut when the tab key is pressed with a modifier', () => {
+        const spy = jasmine.createSpy('tabOut spy');
+        keyManager.tabOut.pipe(take(1)).subscribe(spy);
+
+        Object.defineProperty(fakeKeyEvents.tab, 'shiftKey', {get: () => true});
         keyManager.onKeydown(fakeKeyEvents.tab);
 
         expect(spy).toHaveBeenCalled();
@@ -153,7 +184,7 @@ describe('Key managers', () => {
         expect(fakeKeyEvents.rightArrow.defaultPrevented).toBe(false);
       });
 
-      it('should ignore the horizontal keys when only in horizontal mode', () => {
+      it('should ignore the vertical keys when only in horizontal mode', () => {
         keyManager.withVerticalOrientation(false).withHorizontalOrientation('ltr');
 
         expect(keyManager.activeItemIndex).toBe(0);
@@ -164,7 +195,7 @@ describe('Key managers', () => {
         expect(fakeKeyEvents.downArrow.defaultPrevented).toBe(false);
       });
 
-      describe('with `vertical` direction', () => {
+      describe('with `vertical` direction', function(this: KeyEventTestContext) {
         beforeEach(() => {
           keyManager.withVerticalOrientation();
           this.nextKeyEvent = createKeyboardEvent('keydown', DOWN_ARROW);
@@ -174,7 +205,7 @@ describe('Key managers', () => {
         runDirectionalKeyTests.call(this);
       });
 
-      describe('with `ltr` direction', () => {
+      describe('with `ltr` direction', function(this: KeyEventTestContext) {
         beforeEach(() => {
           keyManager.withHorizontalOrientation('ltr');
           this.nextKeyEvent = createKeyboardEvent('keydown', RIGHT_ARROW);
@@ -184,7 +215,7 @@ describe('Key managers', () => {
         runDirectionalKeyTests.call(this);
       });
 
-      describe('with `rtl` direction', () => {
+      describe('with `rtl` direction', function(this: KeyEventTestContext) {
         beforeEach(() => {
           keyManager.withHorizontalOrientation('rtl');
           this.nextKeyEvent = createKeyboardEvent('keydown', LEFT_ARROW);
@@ -199,7 +230,7 @@ describe('Key managers', () => {
        * parameters have to be passed in via Jasmine's context object (`this` inside a `beforeEach`)
        * because this function has to run before any `beforeEach`, `beforeAll` etc. hooks.
        */
-      function runDirectionalKeyTests() {
+      function runDirectionalKeyTests(this: KeyEventTestContext) {
         it('should set subsequent items as active when the next key is pressed', () => {
           keyManager.onKeydown(this.nextKeyEvent);
 
@@ -334,6 +365,51 @@ describe('Key managers', () => {
           keyManager.onKeydown(this.prevKeyEvent);
           expect(this.prevKeyEvent.defaultPrevented).toBe(true);
         });
+
+        it('should not do anything for arrow keys if the alt key is held down', () => {
+          runModifierKeyTest(this, 'altKey');
+        });
+
+        it('should not do anything for arrow keys if the control key is held down', () => {
+          runModifierKeyTest(this, 'ctrlKey');
+        });
+
+        it('should not do anything for arrow keys if the meta key is held down', () => {
+          runModifierKeyTest(this, 'metaKey');
+        });
+
+        it('should not do anything for arrow keys if the shift key is held down', () => {
+          runModifierKeyTest(this, 'shiftKey');
+        });
+
+      }
+
+      /** Runs the test that asserts that we handle modifier keys correctly. */
+      function runModifierKeyTest(context: {
+        nextKeyEvent: KeyboardEvent,
+        prevKeyEvent: KeyboardEvent
+      }, modifier: ListKeyManagerModifierKey) {
+        const initialActiveIndex = keyManager.activeItemIndex;
+        const spy = jasmine.createSpy('change spy');
+        const subscription = keyManager.change.subscribe(spy);
+
+        expect(context.nextKeyEvent.defaultPrevented).toBe(false);
+        expect(context.prevKeyEvent.defaultPrevented).toBe(false);
+
+        Object.defineProperty(context.nextKeyEvent, modifier, {get: () => true});
+        Object.defineProperty(context.prevKeyEvent, modifier, {get: () => true});
+
+        keyManager.onKeydown(context.nextKeyEvent);
+        expect(context.nextKeyEvent.defaultPrevented).toBe(false);
+        expect(keyManager.activeItemIndex).toBe(initialActiveIndex);
+        expect(spy).not.toHaveBeenCalled();
+
+        keyManager.onKeydown(context.prevKeyEvent);
+        expect(context.prevKeyEvent.defaultPrevented).toBe(false);
+        expect(keyManager.activeItemIndex).toBe(initialActiveIndex);
+        expect(spy).not.toHaveBeenCalled();
+
+        subscription.unsubscribe();
       }
 
     });
@@ -526,6 +602,20 @@ describe('Key managers', () => {
 
         keyManager.onKeydown(fakeKeyEvents.downArrow);
       });
+
+      it('should be able to disable wrapping', () => {
+        keyManager.withWrap();
+        keyManager.setFirstItemActive();
+        keyManager.onKeydown(fakeKeyEvents.upArrow);
+
+        expect(keyManager.activeItemIndex).toBe(itemList.items.length - 1);
+
+        keyManager.withWrap(false);
+        keyManager.setFirstItemActive();
+        keyManager.onKeydown(fakeKeyEvents.upArrow);
+
+        expect(keyManager.activeItemIndex).toBe(0);
+      });
     });
 
     describe('skip predicate', () => {
@@ -566,15 +656,16 @@ describe('Key managers', () => {
 
         invalidQueryList.items = [{ disabled: false }];
 
-        const invalidManager = new ListKeyManager(invalidQueryList);
+        const invalidManager =
+            new ListKeyManager(invalidQueryList as QueryList<ListKeyManagerOption>);
 
         expect(() => invalidManager.withTypeAhead()).toThrowError(/must implement/);
       });
 
       it('should debounce the input key presses', fakeAsync(() => {
-        keyManager.onKeydown(createKeyboardEvent('keydown', 79, undefined, 'o')); // types "o"
-        keyManager.onKeydown(createKeyboardEvent('keydown', 78, undefined, 'n')); // types "n"
-        keyManager.onKeydown(createKeyboardEvent('keydown', 69, undefined, 'e')); // types "e"
+        keyManager.onKeydown(createKeyboardEvent('keydown', 79, 'o')); // types "o"
+        keyManager.onKeydown(createKeyboardEvent('keydown', 78, 'n')); // types "n"
+        keyManager.onKeydown(createKeyboardEvent('keydown', 69, 'e')); // types "e"
 
         expect(keyManager.activeItem).not.toBe(itemList.items[0]);
 
@@ -584,16 +675,40 @@ describe('Key managers', () => {
       }));
 
       it('should focus the first item that starts with a letter', fakeAsync(() => {
-        keyManager.onKeydown(createKeyboardEvent('keydown', 84, undefined, 't')); // types "t"
+        keyManager.onKeydown(createKeyboardEvent('keydown', 84, 't')); // types "t"
 
         tick(debounceInterval);
 
         expect(keyManager.activeItem).toBe(itemList.items[1]);
       }));
 
+      it('should not move focus if a modifier, that is not allowed, is pressed', fakeAsync(() => {
+        const tEvent = createKeyboardEvent('keydown', 84, 't');
+        Object.defineProperty(tEvent, 'ctrlKey', {get: () => true});
+
+        expect(keyManager.activeItem).toBeFalsy();
+
+        keyManager.onKeydown(tEvent); // types "t"
+        tick(debounceInterval);
+
+        expect(keyManager.activeItem).toBeFalsy();
+      }));
+
+      it('should always allow the shift key', fakeAsync(() => {
+        const tEvent = createKeyboardEvent('keydown', 84, 't');
+        Object.defineProperty(tEvent, 'shiftKey', {get: () => true});
+
+        expect(keyManager.activeItem).toBeFalsy();
+
+        keyManager.onKeydown(tEvent); // types "t"
+        tick(debounceInterval);
+
+        expect(keyManager.activeItem).toBeTruthy();
+      }));
+
       it('should focus the first item that starts with sequence of letters', fakeAsync(() => {
-        keyManager.onKeydown(createKeyboardEvent('keydown', 84, undefined, 't')); // types "t"
-        keyManager.onKeydown(createKeyboardEvent('keydown', 72, undefined, 'h')); // types "h"
+        keyManager.onKeydown(createKeyboardEvent('keydown', 84, 't')); // types "t"
+        keyManager.onKeydown(createKeyboardEvent('keydown', 72, 'h')); // types "h"
 
         tick(debounceInterval);
 
@@ -601,8 +716,8 @@ describe('Key managers', () => {
       }));
 
       it('should cancel any pending timers if a navigation key is pressed', fakeAsync(() => {
-        keyManager.onKeydown(createKeyboardEvent('keydown', 84, undefined, 't')); // types "t"
-        keyManager.onKeydown(createKeyboardEvent('keydown', 72, undefined, 'h')); // types "h"
+        keyManager.onKeydown(createKeyboardEvent('keydown', 84, 't')); // types "t"
+        keyManager.onKeydown(createKeyboardEvent('keydown', 72, 'h')); // types "h"
         keyManager.onKeydown(fakeKeyEvents.downArrow);
 
         tick(debounceInterval);
@@ -617,7 +732,7 @@ describe('Key managers', () => {
           new FakeFocusable('три')
         ];
 
-        const keyboardEvent = createKeyboardEvent('keydown', 68, undefined, 'д');
+        const keyboardEvent = createKeyboardEvent('keydown', 68, 'д');
 
         keyManager.onKeydown(keyboardEvent); // types "д"
         tick(debounceInterval);
@@ -632,15 +747,15 @@ describe('Key managers', () => {
           new FakeFocusable('`!?')
         ];
 
-        keyManager.onKeydown(createKeyboardEvent('keydown', 192, undefined, '`')); // types "`"
+        keyManager.onKeydown(createKeyboardEvent('keydown', 192, '`')); // types "`"
         tick(debounceInterval);
         expect(keyManager.activeItem).toBe(itemList.items[2]);
 
-        keyManager.onKeydown(createKeyboardEvent('keydown', 51, undefined, '3')); // types "3"
+        keyManager.onKeydown(createKeyboardEvent('keydown', 51, '3')); // types "3"
         tick(debounceInterval);
         expect(keyManager.activeItem).toBe(itemList.items[1]);
 
-        keyManager.onKeydown(createKeyboardEvent('keydown', 219, undefined, '[')); // types "["
+        keyManager.onKeydown(createKeyboardEvent('keydown', 219, '[')); // types "["
         tick(debounceInterval);
         expect(keyManager.activeItem).toBe(itemList.items[0]);
       }));
@@ -649,7 +764,7 @@ describe('Key managers', () => {
         expect(keyManager.activeItem).toBeFalsy();
 
         itemList.items[0].disabled = true;
-        keyManager.onKeydown(createKeyboardEvent('keydown', 79, undefined, 'o')); // types "o"
+        keyManager.onKeydown(createKeyboardEvent('keydown', 79, 'o')); // types "o"
         tick(debounceInterval);
 
         expect(keyManager.activeItem).toBeFalsy();
@@ -665,7 +780,7 @@ describe('Key managers', () => {
         ];
 
         keyManager.setActiveItem(1);
-        keyManager.onKeydown(createKeyboardEvent('keydown', 66, undefined, 'b'));
+        keyManager.onKeydown(createKeyboardEvent('keydown', 66, 'b'));
         tick(debounceInterval);
 
         expect(keyManager.activeItem).toBe(itemList.items[3]);
@@ -681,7 +796,7 @@ describe('Key managers', () => {
         ];
 
         keyManager.setActiveItem(3);
-        keyManager.onKeydown(createKeyboardEvent('keydown', 66, undefined, 'b'));
+        keyManager.onKeydown(createKeyboardEvent('keydown', 66, 'b'));
         tick(debounceInterval);
 
         expect(keyManager.activeItem).toBe(itemList.items[0]);
@@ -689,7 +804,7 @@ describe('Key managers', () => {
 
       it('should wrap back around if the last item is active', fakeAsync(() => {
         keyManager.setActiveItem(2);
-        keyManager.onKeydown(createKeyboardEvent('keydown', 79, undefined, 'o'));
+        keyManager.onKeydown(createKeyboardEvent('keydown', 79, 'o'));
         tick(debounceInterval);
 
         expect(keyManager.activeItem).toBe(itemList.items[0]);
@@ -697,7 +812,7 @@ describe('Key managers', () => {
 
       it('should be able to select the first item', fakeAsync(() => {
         keyManager.setActiveItem(-1);
-        keyManager.onKeydown(createKeyboardEvent('keydown', 79, undefined, 'o'));
+        keyManager.onKeydown(createKeyboardEvent('keydown', 79, 'o'));
         tick(debounceInterval);
 
         expect(keyManager.activeItem).toBe(itemList.items[0]);
@@ -705,10 +820,22 @@ describe('Key managers', () => {
 
       it('should not do anything if there is no match', fakeAsync(() => {
         keyManager.setActiveItem(1);
-        keyManager.onKeydown(createKeyboardEvent('keydown', 87, undefined, 'w'));
+        keyManager.onKeydown(createKeyboardEvent('keydown', 87, 'w'));
         tick(debounceInterval);
 
         expect(keyManager.activeItem).toBe(itemList.items[1]);
+      }));
+
+      it('should expose whether the user is currently typing', fakeAsync(() => {
+        expect(keyManager.isTyping()).toBe(false);
+
+        keyManager.onKeydown(createKeyboardEvent('keydown', 79, 'o')); // types "o"
+
+        expect(keyManager.isTyping()).toBe(true);
+
+        tick(debounceInterval);
+
+        expect(keyManager.isTyping()).toBe(false);
       }));
 
     });
@@ -759,9 +886,9 @@ describe('Key managers', () => {
       expect(keyManager.activeItemIndex)
           .toBe(0, `Expected first item of the list to be active.`);
 
-      keyManager.updateActiveItemIndex(1);
+      keyManager.updateActiveItem(1);
       expect(keyManager.activeItemIndex)
-          .toBe(1, `Expected activeItemIndex to update after calling updateActiveItemIndex().`);
+          .toBe(1, `Expected activeItemIndex to update after calling updateActiveItem().`);
       expect(itemList.items[1].focus).not.toHaveBeenCalledTimes(1);
     });
 

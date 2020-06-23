@@ -8,7 +8,12 @@
           <div class="docs-api-deprecated-marker" {$ macros.deprecationTitle(method) $}>
             Deprecated
           </div>
-        {%- endif -%}   
+        {%- endif -%}
+        {%- if method.isAsync -%}
+        <div class="docs-api-async-method-marker">
+          async
+        </div>
+        {%- endif -%}
         {$ method.name $}
       </th>
     </tr>
@@ -47,7 +52,7 @@
   {% endfor %}
   {%- endif -%}
 
-  {%- if method.showReturns -%}
+  {%- if method.type and method.type !== "void" -%}
   <thead>
     <tr class="docs-api-method-returns-header-row">
       <th colspan="2" class="docs-api-method-returns-header-cell">Returns</th>

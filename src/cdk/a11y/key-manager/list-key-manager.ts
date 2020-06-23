@@ -18,6 +18,7 @@ import {
   Z,
   ZERO,
   NINE,
+  hasModifierKey,
 } from '@angular/cdk/keycodes';
 import {debounceTime, filter, map, tap} from 'rxjs/operators';
 
@@ -30,18 +31,22 @@ export interface ListKeyManagerOption {
   getLabel?(): string;
 }
 
+/** Modifier keys handled by the ListKeyManager. */
+export type ListKeyManagerModifierKey = 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey';
+
 /**
  * This class manages keyboard events for selectable lists. If you pass it a query list
  * of items, it will set the active item correctly when arrow events occur.
  */
 export class ListKeyManager<T extends ListKeyManagerOption> {
   private _activeItemIndex = -1;
-  private _activeItem: T;
+  private _activeItem: T | null = null;
   private _wrap = false;
   private _letterKeyStream = new Subject<string>();
   private _typeaheadSubscription = Subscription.EMPTY;
   private _vertical = true;
   private _horizontal: 'ltr' | 'rtl' | null;
+  private _allowedModifierKeys: ListKeyManagerModifierKey[] = [];
 
   /**
    * Predicate function that can be used to check whether an item should be skipped
@@ -90,11 +95,12 @@ export class ListKeyManager<T extends ListKeyManagerOption> {
   }
 
   /**
-   * Turns on wrapping mode, which ensures that the active item will wrap to
+   * Configures wrapping mode, which determines whether the active item will wrap to
    * the other end of list when there are no more items in the given direction.
+   * @param shouldWrap Whether the list should wrap when reaching the end.
    */
-  withWrap(): this {
-    this._wrap = true;
+  withWrap(shouldWrap = true): this {
+    this._wrap = shouldWrap;
     return this;
   }
 
@@ -118,6 +124,15 @@ export class ListKeyManager<T extends ListKeyManagerOption> {
   }
 
   /**
+   * Modifier keys which are allowed to be held down and whose default actions will be prevented
+   * as the user is pressing the arrow keys. Defaults to not allowing any modifier keys.
+   */
+  withAllowedModifierKeys(keys: ListKeyManagerModifierKey[]): this {
+    this._allowedModifierKeys = keys;
+    return this;
+  }
+
+  /**
    * Turns on typeahead mode which allows users to set the active item by typing.
    * @param debounceInterval Time to wait after the last keystroke before setting the active item.
    */
@@ -132,7 +147,7 @@ export class ListKeyManager<T extends ListKeyManagerOption> {
     // and convert those letters back into a string. Afterwards find the first item that starts
     // with that string and select it.
     this._typeaheadSubscription = this._letterKeyStream.pipe(
-      tap(keyCode => this._pressedLetters.push(keyCode)),
+      tap(letter => this._pressedLetters.push(letter)),
       debounceTime(debounceInterval),
       filter(() => this._pressedLetters.length > 0),
       map(() => this._pressedLetters.join(''))
@@ -187,6 +202,10 @@ export class ListKeyManager<T extends ListKeyManagerOption> {
    */
   onKeydown(event: KeyboardEvent): void {
     const keyCode = event.keyCode;
+    const modifiers: ListKeyManagerModifierKey[] = ['altKey', 'ctrlKey', 'metaKey', 'shiftKey'];
+    const isModifierAllowed = modifiers.every(modifier => {
+      return !event[modifier] || this._allowedModifierKeys.indexOf(modifier) > -1;
+    });
 
     switch (keyCode) {
       case TAB:
@@ -194,7 +213,7 @@ export class ListKeyManager<T extends ListKeyManagerOption> {
         return;
 
       case DOWN_ARROW:
-        if (this._vertical) {
+        if (this._vertical && isModifierAllowed) {
           this.setNextItemActive();
           break;
         } else {
@@ -202,7 +221,7 @@ export class ListKeyManager<T extends ListKeyManagerOption> {
         }
 
       case UP_ARROW:
-        if (this._vertical) {
+        if (this._vertical && isModifierAllowed) {
           this.setPreviousItemActive();
           break;
         } else {
@@ -210,34 +229,30 @@ export class ListKeyManager<T extends ListKeyManagerOption> {
         }
 
       case RIGHT_ARROW:
-        if (this._horizontal === 'ltr') {
-          this.setNextItemActive();
-          break;
-        } else if (this._horizontal === 'rtl') {
-          this.setPreviousItemActive();
+        if (this._horizontal && isModifierAllowed) {
+          this._horizontal === 'rtl' ? this.setPreviousItemActive() : this.setNextItemActive();
           break;
         } else {
           return;
         }
 
       case LEFT_ARROW:
-        if (this._horizontal === 'ltr') {
-          this.setPreviousItemActive();
-          break;
-        } else if (this._horizontal === 'rtl') {
-          this.setNextItemActive();
+        if (this._horizontal && isModifierAllowed) {
+          this._horizontal === 'rtl' ? this.setNextItemActive() : this.setPreviousItemActive();
           break;
         } else {
           return;
         }
 
       default:
-        // Attempt to use the `event.key` which also maps it to the user's keyboard language,
-        // otherwise fall back to resolving alphanumeric characters via the keyCode.
-        if (event.key && event.key.length === 1) {
-          this._letterKeyStream.next(event.key.toLocaleUpperCase());
-        } else if ((keyCode >= A && keyCode <= Z) || (keyCode >= ZERO && keyCode <= NINE)) {
-          this._letterKeyStream.next(String.fromCharCode(keyCode));
+      if (isModifierAllowed || hasModifierKey(event, 'shiftKey')) {
+          // Attempt to use the `event.key` which also maps it to the user's keyboard language,
+          // otherwise fall back to resolving alphanumeric characters via the keyCode.
+          if (event.key && event.key.length === 1) {
+            this._letterKeyStream.next(event.key.toLocaleUpperCase());
+          } else if ((keyCode >= A && keyCode <= Z) || (keyCode >= ZERO && keyCode <= NINE)) {
+            this._letterKeyStream.next(String.fromCharCode(keyCode));
+          }
         }
 
         // Note that we return here, in order to avoid preventing
@@ -257,6 +272,11 @@ export class ListKeyManager<T extends ListKeyManagerOption> {
   /** The active item. */
   get activeItem(): T | null {
     return this._activeItem;
+  }
+
+  /** Gets whether the user is currently typing into the manager using the typeahead feature. */
+  isTyping(): boolean {
+    return this._pressedLetters.length > 0;
   }
 
   /** Sets the active item to the first enabled item in the list. */
@@ -295,19 +315,11 @@ export class ListKeyManager<T extends ListKeyManagerOption> {
   updateActiveItem(item: any): void {
     const itemArray = this._getItemsArray();
     const index = typeof item === 'number' ? item : itemArray.indexOf(item);
+    const activeItem = itemArray[index];
 
+    // Explicitly check for `null` and `undefined` because other falsy values are valid.
+    this._activeItem = activeItem == null ? null : activeItem;
     this._activeItemIndex = index;
-    this._activeItem = itemArray[index];
-  }
-
-  /**
-   * Allows setting of the activeItemIndex without any other effects.
-   * @param index The new activeItemIndex.
-   * @deprecated Use `updateActiveItem` instead.
-   * @deletion-target 7.0.0
-   */
-  updateActiveItemIndex(index: number): void {
-    this.updateActiveItem(index);
   }
 
   /**

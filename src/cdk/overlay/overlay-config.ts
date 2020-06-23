@@ -8,8 +8,7 @@
 
 import {PositionStrategy} from './position/position-strategy';
 import {Direction, Directionality} from '@angular/cdk/bidi';
-import {ScrollStrategy} from './scroll/scroll-strategy';
-import {NoopScrollStrategy} from './scroll/noop-scroll-strategy';
+import {ScrollStrategy, NoopScrollStrategy} from './scroll/index';
 
 
 /** Initial configuration used when creating an overlay. */
@@ -53,11 +52,31 @@ export class OverlayConfig {
    */
   direction?: Direction | Directionality;
 
+  /**
+   * Whether the overlay should be disposed of when the user goes backwards/forwards in history.
+   * Note that this usually doesn't include clicking on links (unless the user is using
+   * the `HashLocationStrategy`).
+   */
+  disposeOnNavigation?: boolean = false;
+
   constructor(config?: OverlayConfig) {
     if (config) {
-      Object.keys(config)
-        .filter(key => typeof config[key] !== 'undefined')
-        .forEach(key => this[key] = config[key]);
+      // Use `Iterable` instead of `Array` because TypeScript, as of 3.6.3,
+      // loses the array generic type in the `for of`. But we *also* have to use `Array` because
+      // typescript won't iterate over an `Iterable` unless you compile with `--downlevelIteration`
+      const configKeys =
+          Object.keys(config) as Iterable<keyof OverlayConfig> & (keyof OverlayConfig)[];
+      for (const key of configKeys) {
+        if (config[key] !== undefined) {
+          // TypeScript, as of version 3.5, sees the left-hand-side of this expression
+          // as "I don't know *which* key this is, so the only valid value is the intersection
+          // of all the posible values." In this case, that happens to be `undefined`. TypeScript
+          // is not smart enough to see that the right-hand-side is actually an access of the same
+          // exact type with the same exact key, meaning that the value type must be identical.
+          // So we use `any` to work around this.
+          this[key] = config[key] as any;
+        }
+      }
     }
   }
 }

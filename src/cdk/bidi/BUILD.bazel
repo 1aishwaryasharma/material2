@@ -1,38 +1,49 @@
-package(default_visibility=["//visibility:public"])
-load("@angular//:index.bzl", "ng_module")
-load("@build_bazel_rules_typescript//:defs.bzl", "ts_library", "ts_web_test")
+load(
+    "//tools:defaults.bzl",
+    "markdown_to_html",
+    "ng_module",
+    "ng_test_library",
+    "ng_web_test_suite",
+)
 
+package(default_visibility = ["//visibility:public"])
 
 ng_module(
-  name = "bidi",
-  srcs = glob(["**/*.ts"], exclude=["**/*.spec.ts"]),
-  module_name = "@angular/cdk/bidi",
-  deps = ["@rxjs"],
-  tsconfig = "//src/cdk:tsconfig-build.json",
+    name = "bidi",
+    srcs = glob(
+        ["**/*.ts"],
+        exclude = ["**/*.spec.ts"],
+    ),
+    module_name = "@angular/cdk/bidi",
+    deps = [
+        "@npm//@angular/common",
+        "@npm//@angular/core",
+    ],
 )
 
-ts_library(
-  name = "bidi_test_sources",
-  testonly = 1,
-  srcs = glob(["**/*.spec.ts"]),
-  deps = [
-    ":bidi",
-    "@rxjs",
-  ],
-  tsconfig = "//src/cdk:tsconfig-build.json",
+ng_test_library(
+    name = "unit_test_sources",
+    srcs = glob(
+        ["**/*.spec.ts"],
+        exclude = ["**/*.e2e.spec.ts"],
+    ),
+    deps = [
+        ":bidi",
+        "@npm//@angular/platform-browser",
+    ],
 )
 
-ts_web_test(
-  name = "unit_tests",
-  bootstrap = [
-    "//:web_test_bootstrap_scripts",
-  ],
-  # Do not sort
-  deps = [
-    "//:tslib_bundle",
-    "//:angular_bundles",
-    "//:angular_test_bundles",
-    "//test:angular_test_init",
-    ":bidi_test_sources",
-  ],
+ng_web_test_suite(
+    name = "unit_tests",
+    deps = [":unit_test_sources"],
+)
+
+markdown_to_html(
+    name = "overview",
+    srcs = [":bidi.md"],
+)
+
+filegroup(
+    name = "source-files",
+    srcs = glob(["**/*.ts"]),
 )

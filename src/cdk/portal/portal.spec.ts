@@ -1,22 +1,24 @@
-import {inject, ComponentFixture, TestBed} from '@angular/core/testing';
+import {CommonModule} from '@angular/common';
 import {
-  NgModule,
+  ApplicationRef,
   Component,
+  ComponentFactoryResolver,
+  ComponentRef,
+  ElementRef,
+  Injector,
+  NgModule,
+  Optional,
+  QueryList,
+  TemplateRef,
+  Type,
   ViewChild,
   ViewChildren,
-  QueryList,
   ViewContainerRef,
-  ComponentFactoryResolver,
-  Optional,
-  Injector,
-  ApplicationRef,
-  TemplateRef,
-  ComponentRef,
 } from '@angular/core';
-import {CommonModule} from '@angular/common';
-import {CdkPortal, CdkPortalOutlet, PortalModule} from './portal-directives';
-import {Portal, ComponentPortal, TemplatePortal} from './portal';
+import {ComponentFixture, inject, TestBed} from '@angular/core/testing';
 import {DomPortalOutlet} from './dom-portal-outlet';
+import {ComponentPortal, DomPortal, Portal, TemplatePortal} from './portal';
+import {CdkPortal, CdkPortalOutlet, PortalModule} from './portal-directives';
 
 
 describe('Portals', () => {
@@ -29,9 +31,14 @@ describe('Portals', () => {
 
   describe('CdkPortalOutlet', () => {
     let fixture: ComponentFixture<PortalTestApp>;
+    let componentFactoryResolver: ComponentFactoryResolver;
 
     beforeEach(() => {
       fixture = TestBed.createComponent(PortalTestApp);
+
+      inject([ComponentFactoryResolver], (cfr: ComponentFactoryResolver) => {
+        componentFactoryResolver = cfr;
+      })();
     });
 
     it('should load a component into the portal', () => {
@@ -69,6 +76,63 @@ describe('Portals', () => {
       expect(testAppComponent.portalOutlet.attachedRef).toBeTruthy();
       expect(testAppComponent.attachedSpy)
           .toHaveBeenCalledWith(testAppComponent.portalOutlet.attachedRef);
+    });
+
+    it('should load a DOM portal', () => {
+      const testAppComponent = fixture.componentInstance;
+      const hostContainer = fixture.nativeElement.querySelector('.portal-container');
+      const innerContent = fixture.nativeElement.querySelector('.dom-portal-inner-content');
+      const domPortal = new DomPortal(testAppComponent.domPortalContent);
+      const initialParent = domPortal.element.parentNode!;
+
+      expect(innerContent).toBeTruthy('Expected portal content to be rendered.');
+      expect(domPortal.element.contains(innerContent))
+          .toBe(true, 'Expected content to be inside portal on init.');
+      expect(hostContainer.contains(innerContent))
+          .toBe(false, 'Expected content to be outside of portal outlet.');
+
+      testAppComponent.selectedPortal = domPortal;
+      fixture.detectChanges();
+
+      expect(domPortal.element.parentNode)
+          .not.toBe(initialParent, 'Expected portal to be out of the initial parent on attach.');
+      expect(hostContainer.contains(innerContent))
+          .toBe(true, 'Expected content to be inside the outlet on attach.');
+
+      testAppComponent.selectedPortal = undefined;
+      fixture.detectChanges();
+
+      expect(domPortal.element.parentNode)
+          .toBe(initialParent, 'Expected portal to be back inside initial parent on detach.');
+      expect(hostContainer.contains(innerContent))
+          .toBe(false, 'Expected content to be removed from outlet on detach.');
+    });
+
+    it('should throw when trying to load an element without a parent into a DOM portal', () => {
+      const testAppComponent = fixture.componentInstance;
+      const element = document.createElement('div');
+      const domPortal = new DomPortal(element);
+
+      expect(() => {
+        testAppComponent.selectedPortal = domPortal;
+        fixture.detectChanges();
+      }).toThrowError('DOM portal content must be attached to a parent node.');
+    });
+
+    it('should not throw when restoring if the outlet element was cleared', () => {
+      const testAppComponent = fixture.componentInstance;
+      const parent = fixture.nativeElement.querySelector('.dom-portal-parent');
+      const domPortal = new DomPortal(testAppComponent.domPortalContent);
+
+      testAppComponent.selectedPortal = domPortal;
+      fixture.detectChanges();
+
+      parent.innerHTML = '';
+
+      expect(() => {
+        testAppComponent.selectedPortal = undefined;
+        fixture.detectChanges();
+      }).not.toThrow();
     });
 
     it('should project template context bindings in the portal', () => {
@@ -311,6 +375,29 @@ describe('Portals', () => {
       expect(instance.portalOutlet.hasAttached()).toBe(true);
     });
 
+    it('should use the `ComponentFactoryResolver` from the portal, if available', () => {
+      const spy = jasmine.createSpy('resolveComponentFactorySpy');
+      const portal = new ComponentPortal(PizzaMsg, undefined, undefined, {
+        resolveComponentFactory: <T>(...args: [Type<T>]) => {
+          spy();
+          return componentFactoryResolver.resolveComponentFactory(...args);
+        }
+      });
+
+      fixture.componentInstance.portalOutlet.attachComponentPortal(portal);
+      expect(spy).toHaveBeenCalled();
+    });
+
+    it('should render inside outlet when component portal specifies view container ref', () => {
+      const hostContainer = fixture.nativeElement.querySelector('.portal-container');
+      const portal = new ComponentPortal(PizzaMsg, fixture.componentInstance.alternateContainer);
+
+      fixture.componentInstance.selectedPortal = portal;
+      fixture.detectChanges();
+
+      expect(hostContainer.textContent).toContain('Pizza');
+    });
+
   });
 
   describe('DomPortalOutlet', () => {
@@ -322,17 +409,18 @@ describe('Portals', () => {
     let host: DomPortalOutlet;
     let injector: Injector;
     let appRef: ApplicationRef;
-
     let deps = [ComponentFactoryResolver, Injector, ApplicationRef];
-    beforeEach(inject(deps, (dcl: ComponentFactoryResolver, i: Injector, ar: ApplicationRef) => {
-      componentFactoryResolver = dcl;
+
+    beforeEach(inject(deps, (cfr: ComponentFactoryResolver, i: Injector, ar: ApplicationRef) => {
+      componentFactoryResolver = cfr;
       injector = i;
       appRef = ar;
     }));
 
     beforeEach(() => {
       someDomElement = document.createElement('div');
-      host = new DomPortalOutlet(someDomElement, componentFactoryResolver, appRef, injector);
+      host = new DomPortalOutlet(someDomElement, componentFactoryResolver, appRef, injector,
+                                 document);
 
       someFixture = TestBed.createComponent(ArbitraryViewContainerRefComponent);
       someViewContainerRef = someFixture.componentInstance.viewContainerRef;
@@ -468,6 +556,57 @@ describe('Portals', () => {
 
       expect(spy).toHaveBeenCalled();
     });
+
+    it('should use the `ComponentFactoryResolver` from the portal, if available', () => {
+      const spy = jasmine.createSpy('resolveComponentFactorySpy');
+      const portal = new ComponentPortal(PizzaMsg, undefined, undefined, {
+        resolveComponentFactory: <T>(...args: [Type<T>]) => {
+          spy();
+          return componentFactoryResolver.resolveComponentFactory(...args);
+        }
+      });
+
+      host.attachComponentPortal(portal);
+      expect(spy).toHaveBeenCalled();
+    });
+
+    it('should attach and detach a DOM portal', () => {
+      const fixture = TestBed.createComponent(PortalTestApp);
+      fixture.detectChanges();
+      const portal = new DomPortal(fixture.componentInstance.domPortalContent);
+
+      portal.attach(host);
+
+      expect(someDomElement.textContent).toContain('Hello there');
+
+      host.detach();
+
+      expect(someDomElement.textContent!.trim()).toBe('');
+    });
+
+    it('should throw when trying to load an element without a parent into a DOM portal', () => {
+      const fixture = TestBed.createComponent(PortalTestApp);
+      fixture.detectChanges();
+      const element = document.createElement('div');
+      const portal = new DomPortal(element);
+
+      expect(() => {
+        portal.attach(host);
+        fixture.detectChanges();
+      }).toThrowError('DOM portal content must be attached to a parent node.');
+    });
+
+    it('should not throw when restoring if the outlet element was cleared', () => {
+      const fixture = TestBed.createComponent(PortalTestApp);
+      fixture.detectChanges();
+      const portal = new DomPortal(fixture.componentInstance.domPortalContent);
+
+      portal.attach(host);
+      host.outletElement.innerHTML = '';
+
+      expect(() => host.detach()).not.toThrow();
+    });
+
   });
 });
 
@@ -513,6 +652,8 @@ class ArbitraryViewContainerRefComponent {
     <ng-template [cdkPortalOutlet]="selectedPortal" (attached)="attachedSpy($event)"></ng-template>
   </div>
 
+  <ng-container #alternateContainer></ng-container>
+
   <ng-template cdk-portal>Cake</ng-template>
 
   <div *cdk-portal>Pie</div>
@@ -525,12 +666,21 @@ class ArbitraryViewContainerRefComponent {
   </ng-template>
 
   <ng-template #templateRef let-data> {{fruit}} - {{ data?.status }}!</ng-template>
+
+  <div class="dom-portal-parent">
+    <div #domPortalContent>
+      <p class="dom-portal-inner-content">Hello there</p>
+    </div>
+  </div>
   `,
 })
 class PortalTestApp {
   @ViewChildren(CdkPortal) portals: QueryList<CdkPortal>;
-  @ViewChild(CdkPortalOutlet) portalOutlet: CdkPortalOutlet;
-  @ViewChild('templateRef', { read: TemplateRef }) templateRef: TemplateRef<any>;
+  @ViewChild(CdkPortalOutlet, {static: true}) portalOutlet: CdkPortalOutlet;
+  @ViewChild('templateRef', {read: TemplateRef, static: true}) templateRef: TemplateRef<any>;
+  @ViewChild('domPortalContent', {static: true}) domPortalContent: ElementRef<HTMLElement>;
+  @ViewChild('alternateContainer', {read: ViewContainerRef, static: true})
+  alternateContainer: ViewContainerRef;
 
   selectedPortal: Portal<any>|undefined;
   fruit: string = 'Banana';
@@ -566,7 +716,7 @@ class PortalTestApp {
   `,
 })
 class UnboundPortalTestApp {
-  @ViewChild(CdkPortalOutlet) portalOutlet: CdkPortalOutlet;
+  @ViewChild(CdkPortalOutlet, {static: true}) portalOutlet: CdkPortalOutlet;
 }
 
 // Create a real (non-test) NgModule as a workaround for

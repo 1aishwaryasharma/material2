@@ -1,24 +1,36 @@
-package(default_visibility=["//visibility:public"])
-load("@angular//:index.bzl", "ng_module", "ng_package")
-load("//:packages.bzl", "CDK_TARGETS", "ROLLUP_GLOBALS", "VERSION_PLACEHOLDER_REPLACEMENTS")
+load(
+    "//src/material-experimental:config.bzl",
+    "MATERIAL_EXPERIMENTAL_SCSS_LIBS",
+    "MATERIAL_EXPERIMENTAL_TARGETS",
+    "MATERIAL_EXPERIMENTAL_TESTING_TARGETS",
+)
+load("//tools:defaults.bzl", "ng_package", "ts_library")
 
+package(default_visibility = ["//visibility:public"])
 
-ng_module(
-  name = "material-experimental",
-  srcs = glob(["**/*.ts"], exclude=["**/*.spec.ts"]),
-  module_name = "@angular/material-experimental",
-  deps = [
-    "//src/lib:material",
-  ] + CDK_TARGETS,
-  tsconfig = "//src/lib:tsconfig-build.json",
+exports_files(["mdc_require_config.js"])
+
+ts_library(
+    name = "material-experimental",
+    srcs = glob(
+        ["*.ts"],
+        exclude = ["**/*.spec.ts"],
+    ),
+    module_name = "@angular/material-experimental",
+    deps = ["@npm//@angular/core"],
 )
 
 ng_package(
-  name = "npm_package",
-  srcs = ["package.json"],
-  entry_point = "src/material-experimental/public_api.js",
-  globals = ROLLUP_GLOBALS,
-  replacements = VERSION_PLACEHOLDER_REPLACEMENTS,
-  deps = [":material-experimental"],
-  tags = ["publish"],
+    name = "npm_package",
+    srcs = ["package.json"],
+    data = MATERIAL_EXPERIMENTAL_SCSS_LIBS + [
+        "//src/material-experimental/mdc-color",
+        "//src/material-experimental/mdc-density",
+        "//src/material-experimental/mdc-helpers",
+        "//src/material-experimental/mdc-theming",
+        "//src/material-experimental/mdc-typography",
+    ],
+    entry_point = ":public-api.ts",
+    tags = ["release-package"],
+    deps = MATERIAL_EXPERIMENTAL_TARGETS + MATERIAL_EXPERIMENTAL_TESTING_TARGETS,
 )

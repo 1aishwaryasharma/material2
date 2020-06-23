@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {Platform, supportsPassiveEventListeners} from '@angular/cdk/platform';
+import {Platform, normalizePassiveListenerOptions} from '@angular/cdk/platform';
 import {
   Directive,
   ElementRef,
@@ -17,6 +17,7 @@ import {
   OnInit,
   Output,
 } from '@angular/core';
+import {coerceElement} from '@angular/cdk/coercion';
 import {EMPTY, Observable, Subject} from 'rxjs';
 
 
@@ -37,7 +38,7 @@ type MonitoredElementInfo = {
 
 
 /** Options to pass to the animationstart listener. */
-const listenerOptions: any = supportsPassiveEventListeners() ? {passive: true} : false;
+const listenerOptions = normalizePassiveListenerOptions({passive: true});
 
 
 /**
@@ -56,11 +57,21 @@ export class AutofillMonitor implements OnDestroy {
    * @param element The element to monitor.
    * @return A stream of autofill state changes.
    */
-  monitor(element: Element): Observable<AutofillEvent> {
+  monitor(element: Element): Observable<AutofillEvent>;
+
+  /**
+   * Monitor for changes in the autofill state of the given input element.
+   * @param element The element to monitor.
+   * @return A stream of autofill state changes.
+   */
+  monitor(element: ElementRef<Element>): Observable<AutofillEvent>;
+
+  monitor(elementOrRef: Element | ElementRef<Element>): Observable<AutofillEvent> {
     if (!this._platform.isBrowser) {
       return EMPTY;
     }
 
+    const element = coerceElement(elementOrRef);
     const info = this._monitoredElements.get(element);
 
     if (info) {
@@ -68,15 +79,21 @@ export class AutofillMonitor implements OnDestroy {
     }
 
     const result = new Subject<AutofillEvent>();
-    const listener = (event: AnimationEvent) => {
-      if (event.animationName === 'cdk-text-field-autofill-start') {
-        element.classList.add('cdk-text-field-autofilled');
-        result.next({target: event.target as Element, isAutofilled: true});
-      } else if (event.animationName === 'cdk-text-field-autofill-end') {
-        element.classList.remove('cdk-text-field-autofilled');
-        result.next({target: event.target as Element, isAutofilled: false});
+    const cssClass = 'cdk-text-field-autofilled';
+    const listener = ((event: AnimationEvent) => {
+      // Animation events fire on initial element render, we check for the presence of the autofill
+      // CSS class to make sure this is a real change in state, not just the initial render before
+      // we fire off events.
+      if (event.animationName === 'cdk-text-field-autofill-start' &&
+          !element.classList.contains(cssClass)) {
+        element.classList.add(cssClass);
+        this._ngZone.run(() => result.next({target: event.target as Element, isAutofilled: true}));
+      } else if (event.animationName === 'cdk-text-field-autofill-end' &&
+          element.classList.contains(cssClass)) {
+        element.classList.remove(cssClass);
+        this._ngZone.run(() => result.next({target: event.target as Element, isAutofilled: false}));
       }
-    };
+    }) as EventListenerOrEventListenerObject;
 
     this._ngZone.runOutsideAngular(() => {
       element.addEventListener('animationstart', listener, listenerOptions);
@@ -97,7 +114,16 @@ export class AutofillMonitor implements OnDestroy {
    * Stop monitoring the autofill state of the given input element.
    * @param element The element to stop monitoring.
    */
-  stopMonitoring(element: Element) {
+  stopMonitoring(element: Element): void;
+
+  /**
+   * Stop monitoring the autofill state of the given input element.
+   * @param element The element to stop monitoring.
+   */
+  stopMonitoring(element: ElementRef<Element>): void;
+
+  stopMonitoring(elementOrRef: Element | ElementRef<Element>): void {
+    const element = coerceElement(elementOrRef);
     const info = this._monitoredElements.get(element);
 
     if (info) {
@@ -123,15 +149,16 @@ export class CdkAutofill implements OnDestroy, OnInit {
   /** Emits when the autofill state of the element changes. */
   @Output() cdkAutofill: EventEmitter<AutofillEvent> = new EventEmitter<AutofillEvent>();
 
-  constructor(private _elementRef: ElementRef, private _autofillMonitor: AutofillMonitor) {}
+  constructor(private _elementRef: ElementRef<HTMLElement>,
+              private _autofillMonitor: AutofillMonitor) {}
 
   ngOnInit() {
     this._autofillMonitor
-      .monitor(this._elementRef.nativeElement)
+      .monitor(this._elementRef)
       .subscribe(event => this.cdkAutofill.emit(event));
   }
 
   ngOnDestroy() {
-    this._autofillMonitor.stopMonitoring(this._elementRef.nativeElement);
+    this._autofillMonitor.stopMonitoring(this._elementRef);
   }
 }

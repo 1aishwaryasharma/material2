@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {SelectionModel} from './selection';
+import {SelectionModel} from './selection-model';
 
 
 /**
@@ -27,5 +27,5 @@ export interface TreeDataNodeFlattener<T> {
    * Put node descendants of node in array.
    * If `onlyExpandable` is true, then only process expandable descendants.
    */
-  nodeDescendents(node: T, nodes: T[], onlyExpandable: boolean);
+  nodeDescendents(node: T, nodes: T[], onlyExpandable: boolean): void;
 }

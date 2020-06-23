@@ -1,0 +1,66 @@
+@import '../core/style/layout-common';
+@import './stepper-variables';
+
+.mat-step-header {
+  overflow: hidden;
+  outline: none;
+  cursor: pointer;
+  position: relative;
+  box-sizing: content-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mat-step-optional,
+.mat-step-sub-label-error {
+  font-size: $mat-step-sub-label-font-size;
+}
+
+.mat-step-icon {
+  border-radius: 50%;
+  height: $mat-stepper-label-header-height;
+  width: $mat-stepper-label-header-height;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.mat-step-icon-content,
+.mat-step-icon .mat-icon {
+  // Use absolute positioning to center the content, because it works better with text.
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.mat-step-icon .mat-icon {
+  font-size: $mat-step-header-icon-size;
+  height: $mat-step-header-icon-size;
+  width: $mat-step-header-icon-size;
+}
+
+.mat-step-icon-state-error .mat-icon {
+  font-size: $mat-step-header-icon-size + 8;
+  height: $mat-step-header-icon-size + 8;
+  width: $mat-step-header-icon-size + 8;
+}
+
+.mat-step-label {
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: $mat-stepper-label-min-width;
+  vertical-align: middle;
+}
+
+.mat-step-text-label {
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+// Increase specificity because ripple styles are part of the `mat-core` mixin and can
+// potentially overwrite the absolute position of the container.
+.mat-step-header .mat-step-header-ripple {
+  @include mat-fill;
+  pointer-events: none;
+}

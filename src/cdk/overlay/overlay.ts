@@ -8,7 +8,7 @@
 
 import {Directionality} from '@angular/cdk/bidi';
 import {DomPortalOutlet} from '@angular/cdk/portal';
-import {DOCUMENT} from '@angular/common';
+import {DOCUMENT, Location} from '@angular/common';
 import {
   ApplicationRef,
   ComponentFactoryResolver,
@@ -16,6 +16,7 @@ import {
   Injectable,
   Injector,
   NgZone,
+  Optional,
 } from '@angular/core';
 import {OverlayKeyboardDispatcher} from './keyboard/overlay-keyboard-dispatcher';
 import {OverlayConfig} from './overlay-config';
@@ -28,8 +29,8 @@ import {ScrollStrategyOptions} from './scroll/index';
 /** Next overlay unique ID. */
 let nextUniqueId = 0;
 
-// Note that Overlay is *not* scoped to the app root because the ComponentFactoryResolver
-// it needs is different based on where OverlayModule is imported.
+// Note that Overlay is *not* scoped to the app root because of the ComponentFactoryResolver
+// which needs to be different depending on where OverlayModule is imported.
 
 /**
  * Service to create Overlays. Overlays are dynamically added pieces of floating UI, meant to be
@@ -53,7 +54,9 @@ export class Overlay {
               private _injector: Injector,
               private _ngZone: NgZone,
               @Inject(DOCUMENT) private _document: any,
-              private _directionality: Directionality) { }
+              private _directionality: Directionality,
+              // @breaking-change 8.0.0 `_location` parameter to be made required.
+              @Optional() private _location?: Location) { }
 
   /**
    * Creates an overlay.
@@ -69,7 +72,7 @@ export class Overlay {
     overlayConfig.direction = overlayConfig.direction || this._directionality.value;
 
     return new OverlayRef(portalOutlet, host, pane, overlayConfig, this._ngZone,
-      this._keyboardDispatcher, this._document);
+      this._keyboardDispatcher, this._document, this._location);
   }
 
   /**
@@ -118,6 +121,7 @@ export class Overlay {
       this._appRef = this._injector.get<ApplicationRef>(ApplicationRef);
     }
 
-    return new DomPortalOutlet(pane, this._componentFactoryResolver, this._appRef, this._injector);
+    return new DomPortalOutlet(pane, this._componentFactoryResolver, this._appRef, this._injector,
+                               this._document);
   }
 }

@@ -9,6 +9,7 @@
 import {Injectable, Inject, OnDestroy} from '@angular/core';
 import {OverlayContainer} from './overlay-container';
 import {DOCUMENT} from '@angular/common';
+import {Platform} from '@angular/cdk/platform';
 
 
 /**
@@ -18,13 +19,19 @@ import {DOCUMENT} from '@angular/common';
  *
  * Should be provided in the root component.
  */
-@Injectable()
+@Injectable({providedIn: 'root'})
 export class FullscreenOverlayContainer extends OverlayContainer implements OnDestroy {
   private _fullScreenEventName: string | undefined;
   private _fullScreenListener: () => void;
 
-  constructor(@Inject(DOCUMENT) _document: any) {
-    super(_document);
+  constructor(
+    @Inject(DOCUMENT) _document: any,
+    /**
+     * @deprecated `platform` parameter to become required.
+     * @breaking-change 10.0.0
+     */
+    platform?: Platform) {
+    super(_document, platform);
   }
 
   ngOnDestroy() {
@@ -66,13 +73,15 @@ export class FullscreenOverlayContainer extends OverlayContainer implements OnDe
 
   private _getEventName(): string | undefined {
     if (!this._fullScreenEventName) {
-      if (this._document.fullscreenEnabled) {
+      const _document = this._document as any;
+
+      if (_document.fullscreenEnabled) {
         this._fullScreenEventName = 'fullscreenchange';
-      } else if (this._document.webkitFullscreenEnabled) {
+      } else if (_document.webkitFullscreenEnabled) {
         this._fullScreenEventName = 'webkitfullscreenchange';
-      } else if ((this._document as any).mozFullScreenEnabled) {
+      } else if (_document.mozFullScreenEnabled) {
         this._fullScreenEventName = 'mozfullscreenchange';
-      } else if ((this._document as any).msFullscreenEnabled) {
+      } else if (_document.msFullscreenEnabled) {
         this._fullScreenEventName = 'MSFullscreenChange';
       }
     }
@@ -85,10 +94,12 @@ export class FullscreenOverlayContainer extends OverlayContainer implements OnDe
    * Only that element and its children are visible when in fullscreen mode.
    */
   getFullscreenElement(): Element {
-    return this._document.fullscreenElement ||
-           this._document.webkitFullscreenElement ||
-           (this._document as any).mozFullScreenElement ||
-           (this._document as any).msFullscreenElement ||
+    const _document = this._document as any;
+
+    return _document.fullscreenElement ||
+           _document.webkitFullscreenElement ||
+           _document.mozFullScreenElement ||
+           _document.msFullscreenElement ||
            null;
   }
 }

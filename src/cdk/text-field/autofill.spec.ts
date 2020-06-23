@@ -6,15 +6,15 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {supportsPassiveEventListeners} from '@angular/cdk/platform';
-import {Component, ElementRef, ViewChild} from '@angular/core';
+import {normalizePassiveListenerOptions} from '@angular/cdk/platform';
+import {Component, ElementRef, NgZone, ViewChild} from '@angular/core';
 import {ComponentFixture, inject, TestBed} from '@angular/core/testing';
 import {EMPTY} from 'rxjs';
 import {AutofillEvent, AutofillMonitor} from './autofill';
 import {TextFieldModule} from './text-field-module';
 
 
-const listenerOptions: any = supportsPassiveEventListeners() ? {passive: true} : false;
+const listenerOptions = normalizePassiveListenerOptions({passive: true});
 
 
 describe('AutofillMonitor', () => {
@@ -99,7 +99,7 @@ describe('AutofillMonitor', () => {
     const inputEl = testComponent.input1.nativeElement;
     let animationStartCallback: Function = () => {};
     let autofillStreamEvent: AutofillEvent | null = null;
-    inputEl.addEventListener.and.callFake((_, cb) => animationStartCallback = cb);
+    inputEl.addEventListener.and.callFake((_: string, cb: Function) => animationStartCallback = cb);
     const autofillStream = autofillMonitor.monitor(inputEl);
     autofillStream.subscribe(event => autofillStreamEvent = event);
     expect(autofillStreamEvent).toBeNull();
@@ -114,7 +114,7 @@ describe('AutofillMonitor', () => {
     const inputEl = testComponent.input1.nativeElement;
     let animationStartCallback: Function = () => {};
     let autofillStreamEvent: AutofillEvent | null = null;
-    inputEl.addEventListener.and.callFake((_, cb) => animationStartCallback = cb);
+    inputEl.addEventListener.and.callFake((_: string, cb: Function) => animationStartCallback = cb);
     const autofillStream = autofillMonitor.monitor(inputEl);
     autofillStream.subscribe(event => autofillStreamEvent = event);
     animationStartCallback({animationName: 'cdk-text-field-autofill-start', target: inputEl});
@@ -129,7 +129,7 @@ describe('AutofillMonitor', () => {
   it('should cleanup filled class if monitoring stopped in autofilled state', () => {
     const inputEl = testComponent.input1.nativeElement;
     let animationStartCallback: Function = () => {};
-    inputEl.addEventListener.and.callFake((_, cb) => animationStartCallback = cb);
+    inputEl.addEventListener.and.callFake((_: string, cb: Function) => animationStartCallback = cb);
     autofillMonitor.monitor(inputEl);
     animationStartCallback({animationName: 'cdk-text-field-autofill-start', target: inputEl});
     expect(inputEl.classList).toContain('cdk-text-field-autofilled');
@@ -143,13 +143,37 @@ describe('AutofillMonitor', () => {
     const autofillStream = autofillMonitor.monitor(element);
     const spy = jasmine.createSpy('autofillStream complete');
 
-    autofillStream.subscribe(undefined, undefined, spy);
+    autofillStream.subscribe({complete: spy});
     expect(spy).not.toHaveBeenCalled();
 
     autofillMonitor.stopMonitoring(element);
     expect(spy).toHaveBeenCalled();
   });
 
+  it('should emit on stream inside the NgZone', () => {
+    const inputEl = testComponent.input1.nativeElement;
+    let animationStartCallback: Function = () => {};
+    inputEl.addEventListener.and.callFake((_: string, cb: Function) => animationStartCallback = cb);
+    const autofillStream = autofillMonitor.monitor(inputEl);
+    const spy = jasmine.createSpy('autofill spy');
+
+    autofillStream.subscribe(() => spy(NgZone.isInAngularZone()));
+    expect(spy).not.toHaveBeenCalled();
+
+    animationStartCallback({animationName: 'cdk-text-field-autofill-start', target: inputEl});
+    expect(spy).toHaveBeenCalledWith(true);
+  });
+
+  it('should not emit on init if input is unfilled', () => {
+    const inputEl = testComponent.input1.nativeElement;
+    let animationStartCallback: Function = () => {};
+    inputEl.addEventListener.and.callFake((_: string, cb: Function) => animationStartCallback = cb);
+    const autofillStream = autofillMonitor.monitor(inputEl);
+    const spy = jasmine.createSpy('autofill spy');
+    autofillStream.subscribe(() => spy());
+    animationStartCallback({animationName: 'cdk-text-field-autofill-end', target: inputEl});
+    expect(spy).not.toHaveBeenCalled();
+  });
 });
 
 describe('cdkAutofill', () => {
@@ -174,13 +198,13 @@ describe('cdkAutofill', () => {
   }));
 
   it('should monitor host element on init', () => {
-    expect(autofillMonitor.monitor).toHaveBeenCalledWith(testComponent.input.nativeElement);
+    expect(autofillMonitor.monitor).toHaveBeenCalledWith(testComponent.input);
   });
 
   it('should stop monitoring host element on destroy', () => {
     expect(autofillMonitor.stopMonitoring).not.toHaveBeenCalled();
     fixture.destroy();
-    expect(autofillMonitor.stopMonitoring).toHaveBeenCalledWith(testComponent.input.nativeElement);
+    expect(autofillMonitor.stopMonitoring).toHaveBeenCalledWith(testComponent.input);
   });
 });
 
@@ -192,14 +216,16 @@ describe('cdkAutofill', () => {
   `
 })
 class Inputs {
-  @ViewChild('input1') input1: ElementRef;
-  @ViewChild('input2') input2: ElementRef;
-  @ViewChild('input3') input3: ElementRef;
+  // Cast to `any` so we can stub out some methods in the tests.
+  @ViewChild('input1', {static: true}) input1: ElementRef<any>;
+  @ViewChild('input2', {static: true}) input2: ElementRef<any>;
+  @ViewChild('input3', {static: true}) input3: ElementRef<any>;
 }
 
 @Component({
   template: `<input #input cdkAutofill>`
 })
 class InputWithCdkAutofilled {
-  @ViewChild('input') input: ElementRef;
+  // Cast to `any` so we can stub out some methods in the tests.
+  @ViewChild('input') input: ElementRef<any>;
 }

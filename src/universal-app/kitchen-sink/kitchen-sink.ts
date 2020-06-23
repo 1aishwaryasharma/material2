@@ -1,52 +1,44 @@
-import {ViewportRuler} from '@angular/cdk/scrolling';
-import {
-  CdkTableModule,
-  DataSource
-} from '@angular/cdk/table';
-import {Component, ElementRef, NgModule} from '@angular/core';
-import {
-  MatAutocompleteModule,
-  MatBadgeModule,
-  MatBottomSheetModule,
-  MatButtonModule,
-  MatButtonToggleModule,
-  MatCardModule,
-  MatCheckboxModule,
-  MatChipsModule,
-  MatDatepickerModule,
-  MatDialog,
-  MatDialogModule,
-  MatDividerModule,
-  MatExpansionModule,
-  MatFormFieldModule,
-  MatGridListModule,
-  MatIconModule,
-  MatInputModule,
-  MatListModule,
-  MatMenuModule,
-  MatNativeDateModule,
-  MatPaginatorModule,
-  MatProgressBarModule,
-  MatProgressSpinnerModule,
-  MatRadioModule,
-  MatRippleModule,
-  MatSelectModule,
-  MatSidenavModule,
-  MatSliderModule,
-  MatSlideToggleModule,
-  MatSnackBar,
-  MatSnackBarModule,
-  MatSortModule,
-  MatStepperModule,
-  MatTableModule,
-  MatTabsModule,
-  MatToolbarModule,
-  MatTooltipModule,
-  MatBottomSheet,
-} from '@angular/material';
-import {BrowserModule} from '@angular/platform-browser';
-import {ServerModule} from '@angular/platform-server';
 import {FocusMonitor} from '@angular/cdk/a11y';
+import {DragDropModule} from '@angular/cdk/drag-drop';
+import {ScrollingModule, ViewportRuler} from '@angular/cdk/scrolling';
+import {CdkTableModule, DataSource} from '@angular/cdk/table';
+import {Component, ElementRef, NgModule, ErrorHandler} from '@angular/core';
+import {MatNativeDateModule, MatRippleModule} from '@angular/material/core';
+import {MatAutocompleteModule} from '@angular/material/autocomplete';
+import {MatButtonModule} from '@angular/material/button';
+import {MatButtonToggleModule} from '@angular/material/button-toggle';
+import {MatCardModule} from '@angular/material/card';
+import {MatCheckboxModule} from '@angular/material/checkbox';
+import {MatChipsModule} from '@angular/material/chips';
+import {MatTableModule} from '@angular/material/table';
+import {MatDatepickerModule} from '@angular/material/datepicker';
+import {MatDialogModule, MatDialog} from '@angular/material/dialog';
+import {MatExpansionModule} from '@angular/material/expansion';
+import {MatGridListModule} from '@angular/material/grid-list';
+import {MatIconModule} from '@angular/material/icon';
+import {MatInputModule} from '@angular/material/input';
+import {MatListModule} from '@angular/material/list';
+import {MatMenuModule} from '@angular/material/menu';
+import {MatPaginatorModule} from '@angular/material/paginator';
+import {MatProgressBarModule} from '@angular/material/progress-bar';
+import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {MatRadioModule} from '@angular/material/radio';
+import {MatSelectModule} from '@angular/material/select';
+import {MatSidenavModule} from '@angular/material/sidenav';
+import {MatSliderModule} from '@angular/material/slider';
+import {MatSlideToggleModule} from '@angular/material/slide-toggle';
+import {MatSnackBarModule, MatSnackBar} from '@angular/material/snack-bar';
+import {MatTabsModule} from '@angular/material/tabs';
+import {MatToolbarModule} from '@angular/material/toolbar';
+import {MatTooltipModule} from '@angular/material/tooltip';
+import {MatBottomSheetModule, MatBottomSheet} from '@angular/material/bottom-sheet';
+import {MatBadgeModule} from '@angular/material/badge';
+import {MatDividerModule} from '@angular/material/divider';
+import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatSortModule} from '@angular/material/sort';
+import {MatStepperModule} from '@angular/material/stepper';
+import {YouTubePlayerModule} from '@angular/youtube-player';
+import {GoogleMapsModule} from '@angular/google-maps';
 import {Observable, of as observableOf} from 'rxjs';
 
 export class TableDataSource extends DataSource<any> {
@@ -67,15 +59,22 @@ export class TestEntryComponent {}
 @Component({
   selector: 'kitchen-sink',
   templateUrl: './kitchen-sink.html',
-  styleUrls: ['./kitchen-sink.css'],
+  styles: [`
+    .universal-viewport {
+      height: 100px;
+      border: 1px solid black;
+    }
+  `]
 })
 export class KitchenSink {
-
   /** List of columns for the CDK and Material table. */
   tableColumns = ['userId'];
 
   /** Data source for the CDK and Material table. */
   tableDataSource = new TableDataSource();
+
+  /** Data used to render a virtual scrolling list. */
+  virtualScrollData = Array(10000).fill(50);
 
   constructor(
     snackBar: MatSnackBar,
@@ -84,7 +83,7 @@ export class KitchenSink {
     focusMonitor: FocusMonitor,
     elementRef: ElementRef<HTMLElement>,
     bottomSheet: MatBottomSheet) {
-    focusMonitor.focusVia(elementRef.nativeElement, 'program');
+    focusMonitor.focusVia(elementRef, 'program');
     snackBar.open('Hello there');
     dialog.open(TestEntryComponent);
     bottomSheet.open(TestEntryComponent);
@@ -99,7 +98,6 @@ export class KitchenSink {
 
 @NgModule({
   imports: [
-    BrowserModule.withServerTransition({appId: 'kitchen-sink'}),
     MatAutocompleteModule,
     MatBadgeModule,
     MatBottomSheetModule,
@@ -135,19 +133,30 @@ export class KitchenSink {
     MatSortModule,
     MatTableModule,
     MatStepperModule,
+    ScrollingModule,
 
     // CDK Modules
-    CdkTableModule
+    CdkTableModule,
+    DragDropModule,
+
+    // Other modules
+    YouTubePlayerModule,
+    GoogleMapsModule,
   ],
-  bootstrap: [KitchenSink],
   declarations: [KitchenSink, TestEntryComponent],
+  exports: [KitchenSink, TestEntryComponent],
   entryComponents: [TestEntryComponent],
+  providers: [{
+    // If an error is thrown asynchronously during server-side rendering it'll get logged to stderr,
+    // but it won't cause the build to fail. We still want to catch these errors so we provide an
+    // `ErrorHandler` that re-throws the error and causes the process to exit correctly.
+    provide: ErrorHandler,
+    useValue: {handleError: ERROR_HANDLER}
+  }]
 })
-export class KitchenSinkClientModule { }
+export class KitchenSinkModule {
+}
 
-
-@NgModule({
-  imports: [KitchenSinkClientModule, ServerModule],
-  bootstrap: [KitchenSink],
-})
-export class KitchenSinkServerModule { }
+export function ERROR_HANDLER(error: Error) {
+  throw error;
+}

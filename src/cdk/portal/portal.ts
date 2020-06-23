@@ -12,7 +12,8 @@ import {
     ElementRef,
     ComponentRef,
     EmbeddedViewRef,
-    Injector
+    Injector,
+    ComponentFactoryResolver,
 } from '@angular/core';
 import {
     throwNullPortalOutletError,
@@ -93,21 +94,29 @@ export class ComponentPortal<T> extends Portal<ComponentRef<T>> {
   /** [Optional] Injector used for the instantiation of the component. */
   injector?: Injector | null;
 
+  /**
+   * Alternate `ComponentFactoryResolver` to use when resolving the associated component.
+   * Defaults to using the resolver from the outlet that the portal is attached to.
+   */
+  componentFactoryResolver?: ComponentFactoryResolver | null;
+
   constructor(
       component: ComponentType<T>,
       viewContainerRef?: ViewContainerRef | null,
-      injector?: Injector | null) {
+      injector?: Injector | null,
+      componentFactoryResolver?: ComponentFactoryResolver | null) {
     super();
     this.component = component;
     this.viewContainerRef = viewContainerRef;
     this.injector = injector;
+    this.componentFactoryResolver = componentFactoryResolver;
   }
 }
 
 /**
  * A `TemplatePortal` is a portal that represents some embedded template (TemplateRef).
  */
-export class TemplatePortal<C = any> extends Portal<C> {
+export class TemplatePortal<C = any> extends Portal<EmbeddedViewRef<C>> {
   /** The embedded template that will be used to instantiate an embedded View in the host. */
   templateRef: TemplateRef<C>;
 
@@ -129,11 +138,11 @@ export class TemplatePortal<C = any> extends Portal<C> {
   }
 
   /**
-   * Attach the the portal to the provided `PortalOutlet`.
+   * Attach the portal to the provided `PortalOutlet`.
    * When a context is provided it will override the `context` property of the `TemplatePortal`
    * instance.
    */
-  attach(host: PortalOutlet, context: C | undefined = this.context): C {
+  attach(host: PortalOutlet, context: C | undefined = this.context): EmbeddedViewRef<C> {
     this.context = context;
     return super.attach(host);
   }
@@ -141,6 +150,21 @@ export class TemplatePortal<C = any> extends Portal<C> {
   detach(): void {
     this.context = undefined;
     return super.detach();
+  }
+}
+
+/**
+ * A `DomPortal` is a portal whose DOM element will be taken from its current position
+ * in the DOM and moved into a portal outlet, when it is attached. On detach, the content
+ * will be restored to its original position.
+ */
+export class DomPortal<T = HTMLElement> extends Portal<T> {
+  /** DOM node hosting the portal's content. */
+  readonly element: T;
+
+  constructor(element: T | ElementRef<T>) {
+    super();
+    this.element = element instanceof ElementRef ? element.nativeElement : element;
   }
 }
 
@@ -160,6 +184,11 @@ export interface PortalOutlet {
   hasAttached(): boolean;
 }
 
+/**
+ * @deprecated Use `PortalOutlet` instead.
+ * @breaking-change 9.0.0
+ */
+export type PortalHost = PortalOutlet;
 
 /**
  * Partial implementation of PortalOutlet that handles attaching
@@ -204,6 +233,10 @@ export abstract class BasePortalOutlet implements PortalOutlet {
     } else if (portal instanceof TemplatePortal) {
       this._attachedPortal = portal;
       return this.attachTemplatePortal(portal);
+      // @breaking-change 10.0.0 remove null check for `this.attachDomPortal`.
+    } else if (this.attachDomPortal && portal instanceof DomPortal) {
+      this._attachedPortal = portal;
+      return this.attachDomPortal(portal);
     }
 
     throwUnknownPortalTypeError();
@@ -212,6 +245,9 @@ export abstract class BasePortalOutlet implements PortalOutlet {
   abstract attachComponentPortal<T>(portal: ComponentPortal<T>): ComponentRef<T>;
 
   abstract attachTemplatePortal<C>(portal: TemplatePortal<C>): EmbeddedViewRef<C>;
+
+  // @breaking-change 10.0.0 `attachDomPortal` to become a required abstract method.
+  readonly attachDomPortal: null | ((portal: DomPortal) => any) = null;
 
   /** Detaches a previously attached portal. */
   detach(): void {
@@ -245,3 +281,9 @@ export abstract class BasePortalOutlet implements PortalOutlet {
     }
   }
 }
+
+/**
+ * @deprecated Use `BasePortalOutlet` instead.
+ * @breaking-change 9.0.0
+ */
+export abstract class BasePortalHost extends BasePortalOutlet {}

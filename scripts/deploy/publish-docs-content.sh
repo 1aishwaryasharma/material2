@@ -8,15 +8,10 @@ set -e
 
 cd "$(dirname $0)/../../"
 
-if [ -z ${MATERIAL2_DOCS_CONTENT_TOKEN} ]; then
+if [ -z ${MATERIAL2_BUILDS_TOKEN} ]; then
   echo "Error: No access token for GitHub could be found." \
-       "Please set the environment variable 'MATERIAL2_DOCS_CONTENT_TOKEN'."
+       "Please set the environment variable 'MATERIAL2_BUILDS_TOKEN'."
   exit 1
-fi
-
-if [[ ! ${*} == *--no-build* ]]; then
-  $(npm bin)/gulp material-examples:build-release:clean
-  $(npm bin)/gulp docs
 fi
 
 # Path to the project directory.
@@ -28,8 +23,8 @@ docsDistPath="${projectPath}/dist/docs"
 # Path to the cloned docs-content repository.
 docsContentPath="${projectPath}/tmp/material2-docs-content"
 
-# Path to the release output of the @angular/material-examples package.
-examplesPackagePath="${projectPath}/dist/releases/material-examples"
+# Path to the release output of the Bazel "@angular/components-examples" NPM package.
+examplesPackagePath="$(bazel info bazel-bin)/src/components-examples/npm_package"
 
 # Git clone URL for the material2-docs-content repository.
 docsContentRepoUrl="https://github.com/angular/material2-docs-content"
@@ -38,16 +33,20 @@ docsContentRepoUrl="https://github.com/angular/material2-docs-content"
 buildVersion=$(node -pe "require('./package.json').version")
 
 # Name of the branch that is currently being deployed.
-branchName=${TRAVIS_BRANCH:-'master'}
+branchName=${CIRCLE_BRANCH:-'master'}
 
 # Additional information about the last commit for docs-content commits.
 commitSha=$(git rev-parse --short HEAD)
 commitAuthorName=$(git --no-pager show -s --format='%an' HEAD)
 commitAuthorEmail=$(git --no-pager show -s --format='%ae' HEAD)
 commitMessage=$(git log --oneline -n 1)
-commitTag="${buildVersion}-${commitSha}"
 
-buildVersionName="${buildVersion}-${commitSha}"
+# Note that we cannot store the commit SHA in its own version segment
+# as it will not comply with the semver specification. For example:
+# 1.0.0-00abcdef will break since the SHA starts with zeros. To fix this,
+# we create a new version segment with the following format: "1.0.0-sha-00abcdef".
+# See issue: https://jubianchi.github.io/semver-check/#/^8.0.0/8.2.2-0462599
+buildVersionName="${buildVersion}-sha-${commitSha}"
 buildTagName="${branchName}-${commitSha}"
 buildCommitMessage="${branchName} - ${commitMessage}"
 
@@ -56,73 +55,64 @@ echo "Starting deployment of the docs-content for ${buildVersionName} in ${branc
 # Remove the docs-content repository if the directory exists
 rm -Rf ${docsContentPath}
 
-# Clone the docs-content repository.
-git clone ${docsContentRepoUrl} ${docsContentPath} --depth 1
+echo "Starting cloning process of ${docsContentRepoUrl} into ${docsContentPath}.."
 
-echo "Successfully cloned docs-content repository."
+if [[ $(git ls-remote --heads ${docsContentRepoUrl} ${branchName}) ]]; then
+  echo "Branch ${branchName} already exists. Cloning that branch."
+  git clone ${docsContentRepoUrl} ${docsContentPath} --depth 1 --branch ${branchName}
 
-# Go into the repository directory.
-cd ${docsContentPath}
-
-echo "Switched into the repository directory."
-
-if [[ $(git ls-remote --heads origin ${branchName}) ]]; then
-  git checkout ${branchName}
-  echo "Switched to ${branchName} branch."
+  cd ${docsContentPath}
+  echo "Cloned repository and switched into the repository directory (${docsContentPath})."
 else
-  echo "Branch ${branchName} does not exist on the docs-content repo yet. Creating ${branchName}.."
+  echo "Branch ${branchName} does not exist yet."
+  echo "Cloning default branch and creating branch '${branchName}' on top of it."
+
+  git clone ${docsContentRepoUrl} ${docsContentPath} --depth 1
+  cd ${docsContentPath}
+
+  echo "Cloned repository and switched into directory. Creating new branch now.."
+
   git checkout -b ${branchName}
-  echo "Branch created and checked out."
 fi
 
 # Remove everything inside of the docs-content repository.
 rm -Rf ${docsContentPath}/*
 
-echo "Removed everything from the docs-content repository. Copying all files into repository.."
+echo "Removed everything from the docs-content repository. Copying package output.."
 
-# Create all folders that need to exist in the docs-content repository.
-mkdir ${docsContentPath}/{overview,guides,api,examples,stackblitz,examples-package}
+# Copy the package output to the docs-content repository.
+cp -R ${examplesPackagePath}/* ${docsContentPath}
 
-# Copy API and example files to the docs-content repository.
-cp -R ${docsDistPath}/api/* ${docsContentPath}/api
-cp -r ${docsDistPath}/examples/* ${docsContentPath}/examples
-cp -r ${docsDistPath}/stackblitz/* ${docsContentPath}/stackblitz
+# Update permissions for the copied "npm_package". Bazel makes these files readonly
+# in the "bazel-out", but for publishing, they should be writable. Also it's necessary
+# in order to be able to update the "package.json" version
+chmod -R u+w ${docsContentPath}
 
-# Copy the @angular/material-examples package to the docs-content repository.
-cp -r ${examplesPackagePath}/* ${docsContentPath}/examples-package
-
-# Copy the license file to the docs-content repository.
-cp ${projectPath}/LICENSE ${docsContentPath}
-
-# Copy all immediate children of the markdown output the guides/ directory.
-for guidePath in $(find ${docsDistPath}/markdown/ -maxdepth 1 -type f); do
-  cp ${guidePath} ${docsContentPath}/guides
-done
-
-# All files that aren't immediate children of the markdown output are overview documents.
-for overviewPath in $(find ${docsDistPath}/markdown/ -mindepth 2 -type f); do
-  cp ${overviewPath} ${docsContentPath}/overview
-done
-
-echo "Successfully copied all content into the docs-content repository."
+echo "Successfully copied package output into the docs-content repository."
 
 if [[ $(git ls-remote origin "refs/tags/${buildTagName}") ]]; then
   echo "Skipping publish of docs-content because tag is already published. Exiting.."
   exit 0
 fi
 
+# Replace the version in every file recursively with a more specific version that also includes
+# the SHA of the current build job. Normally this "sed" call would just replace the version
+# placeholder, but the version placeholders have been replaced by "npm_package" already.
+escapedVersion=$(echo ${buildVersion} | sed 's/[.[\*^$]/\\&/g')
+sed -i "s/${escapedVersion}/${buildVersionName}/g" $(find . -type f -not -path '*\/.*')
+
 # Setup the Git configuration
 git config user.name "$commitAuthorName"
 git config user.email "$commitAuthorEmail"
 git config credential.helper "store --file=.git/credentials"
 
-echo "https://${MATERIAL2_DOCS_CONTENT_TOKEN}:@github.com" > .git/credentials
+echo "https://${MATERIAL2_BUILDS_TOKEN}:@github.com" > .git/credentials
 
 echo "Credentials for docs-content repository are now set up. Publishing.."
 
 git add -A
 git commit --allow-empty -m "${buildCommitMessage}"
 git tag "${buildTagName}"
-git push origin master --tags
+git push origin ${branchName} --tags --force
 
 echo "Published docs-content for ${buildVersionName} into ${branchName} successfully"

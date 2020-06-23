@@ -1,9 +1,6 @@
 {
-  "functions": {
-    "source": "tools/screenshot-test/functions"
-  },
   "hosting": {
-    "public": "dist/packages/demo-app",
+    "public": "dist/dev-app-web-pkg",
     "rewrites": [
       {
         "source": "/**/!(*.@(js|ts|html|css|json|svg|png|jpg|jpeg))",

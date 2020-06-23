@@ -1,20 +1,8 @@
+import {ApiDoc} from 'dgeni-packages/typescript/api-doc-types/ApiDoc';
 import {ClassExportDoc} from 'dgeni-packages/typescript/api-doc-types/ClassExportDoc';
-import {PropertyMemberDoc} from 'dgeni-packages/typescript/api-doc-types/PropertyMemberDoc';
 import {MemberDoc} from 'dgeni-packages/typescript/api-doc-types/MemberDoc';
-import {CategorizedClassDoc, DeprecationDoc, HasDecoratorsDoc} from './dgeni-definitions';
-
-/**
- * We want to avoid emitting selectors that are deprecated but don't have a way to mark
- * them as such in the source code. Thus, we maintain a separate blacklist of selectors
- * that should not be emitted in the documentation.
- */
-const SELECTOR_BLACKLIST = new Set([
-  '[portal]',
-  '[portalHost]',
-  'textarea[mat-autosize]',
-  '[overlay-origin]',
-  '[connected-overlay]',
-]);
+import {PropertyMemberDoc} from 'dgeni-packages/typescript/api-doc-types/PropertyMemberDoc';
+import {CategorizedClassDoc, DeprecationInfo, HasDecoratorsDoc} from './dgeni-definitions';
 
 export function isMethod(doc: MemberDoc) {
   return doc.hasOwnProperty('parameters') && !doc.isGetAccessor && !doc.isSetAccessor;
@@ -54,18 +42,21 @@ export function isDeprecatedDoc(doc: any) {
   return (doc.tags && doc.tags.tags || []).some((tag: any) => tag.tagName === 'deprecated');
 }
 
+/** Whether the given document is annotated with the "@docs-primary-export" jsdoc tag. */
+export function isPrimaryExportDoc(doc: any) {
+  return (doc.tags && doc.tags.tags || [])
+      .some((tag: any) => tag.tagName === 'docs-primary-export');
+}
+
 export function getDirectiveSelectors(classDoc: CategorizedClassDoc) {
-  if (!classDoc.directiveMetadata) {
-    return;
-  }
+  if (classDoc.directiveMetadata) {
+    const directiveSelectors: string = classDoc.directiveMetadata.get('selector');
 
-  const directiveSelectors: string = classDoc.directiveMetadata.get('selector');
-
-  if (directiveSelectors) {
-    // Filter blacklisted selectors and remove line-breaks in resolved selectors.
-    return directiveSelectors.replace(/[\r\n]/g, '').split(/\s*,\s*/)
-      .filter(s => s !== '' && !s.includes('md') && !SELECTOR_BLACKLIST.has(s));
+    if (directiveSelectors) {
+      return directiveSelectors.replace(/[\r\n]/g, '').split(/\s*,\s*/).filter(s => s !== '');
+    }
   }
+  return undefined;
 }
 
 export function hasMemberDecorator(doc: MemberDoc, decoratorName: string) {
@@ -82,28 +73,24 @@ export function hasDecorator(doc: HasDecoratorsDoc, decoratorName: string) {
     doc.decorators.some(d => d.name == decoratorName);
 }
 
-export function getDeletionTarget(doc: any): string | null {
+export function getBreakingChange(doc: any): string | null {
   if (!doc.tags) {
     return null;
   }
 
-  const deletionTarget = doc.tags.tags.find((t: any) => t.tagName === 'deletion-target');
-
-  return deletionTarget ? deletionTarget.description : null;
+  const breakingChange = doc.tags.tags.find((t: any) => t.tagName === 'breaking-change');
+  return breakingChange ? breakingChange.description : null;
 }
 
 /**
  * Decorates public exposed docs. Creates a property on the doc that indicates whether
  * the item is deprecated or not.
  */
-export function decorateDeprecatedDoc(doc: DeprecationDoc) {
+export function decorateDeprecatedDoc(doc: ApiDoc & DeprecationInfo) {
   doc.isDeprecated = isDeprecatedDoc(doc);
-  doc.deletionTarget = getDeletionTarget(doc);
+  doc.breakingChange = getBreakingChange(doc);
 
-  if (doc.isDeprecated && !doc.deletionTarget) {
-    console.warn('Warning: There is a deprecated item without a @deletion-target tag.', doc.id);
-  } else if  (doc.deletionTarget && !doc.isDeprecated) {
-    console.warn('Warning: There is an item with a @deletion-target which is not deprecated.',
-      doc.id);
+  if (doc.isDeprecated && !doc.breakingChange) {
+    console.warn('Warning: There is a deprecated item without a @breaking-change tag.', doc.id);
   }
 }

@@ -1,0 +1,43 @@
+@import '@material/button/mixins.import';
+@import '@material/button/variables.import';
+@import '@material/ripple/mixins.import';
+@import '../mdc-helpers/mdc-helpers';
+@import '../../cdk/a11y/a11y';
+@import '_button-base';
+
+@include mdc-button-without-ripple($query: $mat-base-styles-query);
+
+.mat-mdc-button, .mat-mdc-unelevated-button, .mat-mdc-raised-button, .mat-mdc-outlined-button {
+  @include _mat-button-interactive();
+  @include _mat-button-disabled();
+}
+
+// Add an outline to make buttons more visible in high contrast mode. Stroked buttons
+// don't need a special look in high-contrast mode, because those already have an outline.
+.mat-mdc-button:not(.mdc-button--outlined),
+.mat-mdc-unelevated-button:not(.mdc-button--outlined),
+.mat-mdc-raised-button:not(.mdc-button--outlined),
+.mat-mdc-outlined-button:not(.mdc-button--outlined),
+.mat-mdc-fab,
+.mat-mdc-mini-fab,
+.mat-mdc-icon-button {
+  @include cdk-high-contrast(active, off) {
+    outline: solid 1px;
+  }
+}
+
+// Since the stroked button has has an actual border that reduces the available space for
+// child elements such as the ripple container or focus overlay, an inherited border radius
+// for the absolute-positioned child elements does not work properly. This is because the
+// child element cannot expand to the same boundaries as the parent element with a border.
+// In order to work around this issue by *not* hiding overflow, we adjust the child elements
+// to fully cover the actual button element. This means that the border-radius would be correct
+// then. See: https://github.com/angular/components/issues/13738
+.mat-mdc-outlined-button .mat-mdc-button-ripple,
+.mat-mdc-outlined-button .mdc-button__ripple {
+  top: -$mdc-button-outlined-border-width;
+  left: -$mdc-button-outlined-border-width;
+  bottom: -$mdc-button-outlined-border-width;
+  right: -$mdc-button-outlined-border-width;
+  border: none;
+}

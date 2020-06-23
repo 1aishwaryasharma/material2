@@ -1,10 +1,14 @@
 import {Component, ViewChild} from '@angular/core';
 import {By} from '@angular/platform-browser';
-import {ComponentFixture, TestBed, async, inject} from '@angular/core/testing';
+import {ComponentFixture, TestBed, async, inject, fakeAsync, tick} from '@angular/core/testing';
 import {Directionality} from '@angular/cdk/bidi';
-import {dispatchKeyboardEvent} from '@angular/cdk/testing';
-import {ESCAPE} from '@angular/cdk/keycodes';
-import {CdkConnectedOverlay, OverlayModule, CdkOverlayOrigin} from './index';
+import {
+  dispatchKeyboardEvent,
+  createKeyboardEvent,
+  dispatchEvent,
+} from '@angular/cdk/testing/private';
+import {ESCAPE, A} from '@angular/cdk/keycodes';
+import {Overlay, CdkConnectedOverlay, OverlayModule, CdkOverlayOrigin} from './index';
 import {OverlayContainer} from './overlay-container';
 import {
   ConnectedOverlayPositionChange,
@@ -14,6 +18,7 @@ import {FlexibleConnectedPositionStrategy} from './position/flexible-connected-p
 
 
 describe('Overlay directives', () => {
+  let overlay: Overlay;
   let overlayContainer: OverlayContainer;
   let overlayContainerElement: HTMLElement;
   let fixture: ComponentFixture<ConnectedOverlayDirectiveTest>;
@@ -32,8 +37,9 @@ describe('Overlay directives', () => {
     fixture.detectChanges();
   });
 
-  beforeEach(inject([OverlayContainer], (oc: OverlayContainer) => {
+  beforeEach(inject([OverlayContainer, Overlay], (oc: OverlayContainer, o: Overlay) => {
     overlayContainer = oc;
+    overlay = o;
     overlayContainerElement = oc.getContainerElement();
   }));
 
@@ -51,15 +57,32 @@ describe('Overlay directives', () => {
     fixture.detectChanges();
 
     expect(overlayContainerElement.textContent).toContain('Menu content');
-    expect(getPaneElement().style.pointerEvents)
-      .toBe('auto', 'Expected the overlay pane to enable pointerEvents when attached.');
 
     fixture.componentInstance.isOpen = false;
     fixture.detectChanges();
 
     expect(overlayContainerElement.textContent).toBe('');
-    expect(getPaneElement().style.pointerEvents)
-      .toBe('none', 'Expected the overlay pane to disable pointerEvents when detached.');
+  });
+
+  it('can change positionStrategy via input', () => {
+    const expectedPositionStrategy =
+        overlay.position()
+            .flexibleConnectedTo(document.body)
+            .withFlexibleDimensions(true)
+            .withPositions([
+
+              {originX: 'start', originY: 'top', overlayX: 'start', overlayY: 'top'},
+            ]);
+    fixture.componentInstance.isOpen = true;
+    fixture.componentInstance.positionStrategy = expectedPositionStrategy;
+    fixture.detectChanges();
+
+    const testComponent: ConnectedOverlayDirectiveTest = fixture.debugElement.componentInstance;
+    const overlayDirective = testComponent.connectedOverlayDirective;
+    const actualPositionStrategy = overlayDirective.overlayRef.getConfig().positionStrategy as
+        FlexibleConnectedPositionStrategy;
+
+    expect(expectedPositionStrategy).toBe(actualPositionStrategy);
   });
 
   it('should destroy the overlay when the directive is destroyed', () => {
@@ -113,11 +136,25 @@ describe('Overlay directives', () => {
     fixture.componentInstance.isOpen = true;
     fixture.detectChanges();
 
-    dispatchKeyboardEvent(document.body, 'keydown', ESCAPE);
+    const event = dispatchKeyboardEvent(document.body, 'keydown', ESCAPE);
     fixture.detectChanges();
 
     expect(overlayContainerElement.textContent!.trim()).toBe('',
         'Expected overlay to have been detached.');
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('should not close when pressing escape with a modifier', () => {
+    fixture.componentInstance.isOpen = true;
+    fixture.detectChanges();
+
+    const event = createKeyboardEvent('keydown', ESCAPE);
+    Object.defineProperty(event, 'altKey', {get: () => true});
+    dispatchEvent(document.body, event);
+    fixture.detectChanges();
+
+    expect(overlayContainerElement.textContent!.trim()).toBeTruthy();
+    expect(event.defaultPrevented).toBe(false);
   });
 
   it('should not depend on the order in which the `origin` and `open` are set', async(() => {
@@ -214,17 +251,36 @@ describe('Overlay directives', () => {
       fixture.componentInstance.isOpen = true;
       fixture.detectChanges();
 
-      let backdrop = overlayContainerElement.querySelector('.cdk-overlay-backdrop');
-      expect(backdrop).toBeTruthy();
+      expect(overlayContainerElement.querySelector('.cdk-overlay-backdrop')).toBeTruthy();
     });
 
     it('should not create the backdrop by default', () => {
       fixture.componentInstance.isOpen = true;
       fixture.detectChanges();
 
-      let backdrop = overlayContainerElement.querySelector('.cdk-overlay-backdrop');
-      expect(backdrop).toBeNull();
+      expect(overlayContainerElement.querySelector('.cdk-overlay-backdrop')).toBeNull();
     });
+
+    it('should be able to change hasBackdrop after the overlay has been initialized',
+      fakeAsync(() => {
+        // Open once with a backdrop
+        fixture.componentInstance.hasBackdrop = true;
+        fixture.componentInstance.isOpen = true;
+        fixture.detectChanges();
+
+        expect(overlayContainerElement.querySelector('.cdk-overlay-backdrop')).toBeTruthy();
+
+        fixture.componentInstance.isOpen = false;
+        fixture.detectChanges();
+        tick(500);
+
+        // Open again without a backdrop.
+        fixture.componentInstance.hasBackdrop = false;
+        fixture.componentInstance.isOpen = true;
+        fixture.detectChanges();
+
+        expect(overlayContainerElement.querySelector('.cdk-overlay-backdrop')).toBeFalsy();
+      }));
 
     it('should set the custom backdrop class', () => {
       fixture.componentInstance.hasBackdrop = true;
@@ -234,6 +290,15 @@ describe('Overlay directives', () => {
       const backdrop =
           overlayContainerElement.querySelector('.cdk-overlay-backdrop') as HTMLElement;
       expect(backdrop.classList).toContain('mat-test-class');
+    });
+
+    it('should set the custom panel class', () => {
+      fixture.componentInstance.isOpen = true;
+      fixture.detectChanges();
+
+      const panel
+        = overlayContainerElement.querySelector('.cdk-overlay-pane') as HTMLElement;
+      expect(panel.classList).toContain('cdk-test-panel-class');
     });
 
     it('should set the offsetX', () => {
@@ -256,7 +321,7 @@ describe('Overlay directives', () => {
     });
 
     it('should set the offsetY', () => {
-      const trigger = fixture.debugElement.query(By.css('button')).nativeElement;
+      const trigger = fixture.debugElement.query(By.css('button'))!.nativeElement;
       trigger.style.position = 'absolute';
       trigger.style.top = '30px';
       trigger.style.height = '20px';
@@ -327,6 +392,7 @@ describe('Overlay directives', () => {
         // TODO(jelbourn) figure out why, when compiling with bazel, these offsets are required.
         offsetX: 0,
         offsetY: 0,
+        panelClass: 'custom-class'
       }];
 
       fixture.componentInstance.isOpen = true;
@@ -352,7 +418,8 @@ describe('Overlay directives', () => {
         overlayX: 'start',
         overlayY: 'top',
         offsetX: 20,
-        offsetY: 10
+        offsetY: 10,
+        panelClass: 'custom-class'
       }];
 
       fixture.componentInstance.isOpen = true;
@@ -365,6 +432,23 @@ describe('Overlay directives', () => {
       expect(Math.floor(overlayRect.left)).toBe(Math.floor(triggerRect.left) + 20);
     });
 
+    it('should take the offset from the position', () => {
+      fixture.componentInstance.positionOverrides = [{
+        originX: 'start',
+        originY: 'top',
+        overlayX: 'start',
+        overlayY: 'top',
+        panelClass: 'custom-class'
+      }];
+
+      fixture.componentInstance.isOpen = true;
+      fixture.detectChanges();
+
+      const panel = getPaneElement();
+      expect(panel.classList).toContain('custom-class');
+      expect(panel.classList).toContain('cdk-test-panel-class');
+    });
+
     it('should be able to set the viewport margin', () => {
       expect(fixture.componentInstance.connectedOverlayDirective.viewportMargin).not.toBe(10);
 
@@ -375,12 +459,12 @@ describe('Overlay directives', () => {
     });
 
     it('should allow for flexible positioning to be enabled', () => {
-      expect(fixture.componentInstance.connectedOverlayDirective.flexibleDiemsions).not.toBe(true);
+      expect(fixture.componentInstance.connectedOverlayDirective.flexibleDimensions).not.toBe(true);
 
       fixture.componentInstance.flexibleDimensions = true;
       fixture.detectChanges();
 
-      expect(fixture.componentInstance.connectedOverlayDirective.flexibleDiemsions).toBe(true);
+      expect(fixture.componentInstance.connectedOverlayDirective.flexibleDimensions).toBe(true);
     });
 
     it('should allow for growing after open to be enabled', () => {
@@ -399,6 +483,47 @@ describe('Overlay directives', () => {
       fixture.detectChanges();
 
       expect(fixture.componentInstance.connectedOverlayDirective.push).toBe(true);
+    });
+
+    it('should update the element size if it changes while open', () => {
+      fixture.componentInstance.width = 250;
+      fixture.componentInstance.height = 250;
+      fixture.componentInstance.isOpen = true;
+      fixture.detectChanges();
+
+      const pane = overlayContainerElement.querySelector('.cdk-overlay-pane') as HTMLElement;
+      expect(pane.style.width).toBe('250px');
+      expect(pane.style.height).toBe('250px');
+
+      fixture.componentInstance.width = 100;
+      fixture.componentInstance.height = 100;
+      fixture.detectChanges();
+
+      expect(pane.style.width).toBe('100px');
+      expect(pane.style.height).toBe('100px');
+    });
+
+    it('should be able to set transform origin selector', () => {
+      const trigger = fixture.nativeElement.querySelector('#trigger');
+
+      trigger.style.position = 'fixed';
+      trigger.style.top = '200px';
+      trigger.style.left = '200px';
+
+      fixture.componentInstance.positionOverrides = [{
+        originX: 'start',
+        originY: 'top',
+        overlayX: 'start',
+        overlayY: 'bottom',
+      }];
+
+      fixture.componentInstance.transformOriginSelector = '.cdk-test-panel-class';
+      fixture.componentInstance.isOpen = true;
+      fixture.detectChanges();
+
+      const target = overlayContainerElement.querySelector('.cdk-test-panel-class')! as HTMLElement;
+
+      expect(target.style.transformOrigin).toContain('left bottom');
     });
 
   });
@@ -447,6 +572,18 @@ describe('Overlay directives', () => {
       expect(fixture.componentInstance.detachHandler).toHaveBeenCalled();
     });
 
+    it('should emit the keydown events from the overlay', () => {
+      expect(fixture.componentInstance.keydownHandler).not.toHaveBeenCalled();
+
+      fixture.componentInstance.isOpen = true;
+      fixture.detectChanges();
+
+      const event = dispatchKeyboardEvent(document.body, 'keydown', A);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.keydownHandler).toHaveBeenCalledWith(event);
+    });
+
   });
 
 });
@@ -461,6 +598,7 @@ describe('Overlay directives', () => {
             [cdkConnectedOverlayOpen]="isOpen"
             [cdkConnectedOverlayWidth]="width"
             [cdkConnectedOverlayHeight]="height"
+            [cdkConnectedOverlayPositionStrategy]="positionStrategy"
             [cdkConnectedOverlayOrigin]="triggerOverride || trigger"
             [cdkConnectedOverlayHasBackdrop]="hasBackdrop"
             [cdkConnectedOverlayViewportMargin]="viewportMargin"
@@ -468,15 +606,18 @@ describe('Overlay directives', () => {
             [cdkConnectedOverlayGrowAfterOpen]="growAfterOpen"
             [cdkConnectedOverlayPush]="push"
             cdkConnectedOverlayBackdropClass="mat-test-class"
+            cdkConnectedOverlayPanelClass="cdk-test-panel-class"
             (backdropClick)="backdropClickHandler($event)"
             [cdkConnectedOverlayOffsetX]="offsetX"
             [cdkConnectedOverlayOffsetY]="offsetY"
             (positionChange)="positionChangeHandler($event)"
             (attach)="attachHandler()"
             (detach)="detachHandler()"
+            (overlayKeydown)="keydownHandler($event)"
             [cdkConnectedOverlayMinWidth]="minWidth"
             [cdkConnectedOverlayMinHeight]="minHeight"
-            [cdkConnectedOverlayPositions]="positionOverrides">
+            [cdkConnectedOverlayPositions]="positionOverrides"
+            [cdkConnectedOverlayTransformOriginOn]="transformOriginSelector">
     <p>Menu content</p>
   </ng-template>`,
 })
@@ -489,6 +630,7 @@ class ConnectedOverlayDirectiveTest {
   width: number | string;
   height: number | string;
   minWidth: number | string;
+  positionStrategy: FlexibleConnectedPositionStrategy;
   minHeight: number | string;
   offsetX: number;
   offsetY: number;
@@ -499,7 +641,8 @@ class ConnectedOverlayDirectiveTest {
   growAfterOpen: boolean;
   push: boolean;
   backdropClickHandler = jasmine.createSpy('backdropClick handler');
-  positionChangeHandler = jasmine.createSpy('positionChangeHandler');
+  positionChangeHandler = jasmine.createSpy('positionChange handler');
+  keydownHandler = jasmine.createSpy('keydown handler');
   positionOverrides: ConnectionPositionPair[];
   attachHandler = jasmine.createSpy('attachHandler').and.callFake(() => {
     this.attachResult =
@@ -507,6 +650,7 @@ class ConnectedOverlayDirectiveTest {
   });
   detachHandler = jasmine.createSpy('detachHandler');
   attachResult: HTMLElement;
+  transformOriginSelector: string;
 }
 
 @Component({

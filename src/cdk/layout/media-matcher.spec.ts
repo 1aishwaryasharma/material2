@@ -5,19 +5,12 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-import {LayoutModule} from './index';
 import {MediaMatcher} from './media-matcher';
-import {async, TestBed, inject} from '@angular/core/testing';
+import {inject} from '@angular/core/testing';
 import {Platform} from '@angular/cdk/platform';
 
 describe('MediaMatcher', () => {
   let mediaMatcher: MediaMatcher;
-
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [LayoutModule]
-    });
-  }));
 
   beforeEach(inject([MediaMatcher], (mm: MediaMatcher) => {
     mediaMatcher = mm;
@@ -42,7 +35,7 @@ describe('MediaMatcher', () => {
       }
 
       function getStyleTagByString(str: string): HTMLStyleElement | undefined {
-        return Array.from(document.head.querySelectorAll('style')).find(tag => {
+        return Array.from(document.head!.querySelectorAll('style')).find(tag => {
           const rules = tag.sheet ? Array.from((tag.sheet as CSSStyleSheet).cssRules) : [];
           return !!rules.find(rule => rule.cssText.includes(str));
         });

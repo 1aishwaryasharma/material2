@@ -18,7 +18,7 @@ export abstract class DataSource<T> {
    *     data source.
    * @returns Observable that emits a new value when the data changes.
    */
-  abstract connect(collectionViewer: CollectionViewer): Observable<T[]>;
+  abstract connect(collectionViewer: CollectionViewer): Observable<T[] | ReadonlyArray<T>>;
 
   /**
    * Disconnects a collection viewer (such as a data-table) from this data source. Can be used
@@ -28,4 +28,12 @@ export abstract class DataSource<T> {
    *     data source.
    */
   abstract disconnect(collectionViewer: CollectionViewer): void;
+}
+
+/** Checks whether an object is a data source. */
+export function isDataSource(value: any): value is DataSource<any> {
+  // Check if the value is a DataSource by observing if it has a connect function. Cannot
+  // be checked as an `instanceof DataSource` since people could create their own sources
+  // that match the interface, but don't extend DataSource.
+  return value && typeof value.connect === 'function';
 }

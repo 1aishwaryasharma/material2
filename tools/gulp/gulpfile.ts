@@ -1,35 +1,23 @@
-import {createPackageBuildTasks} from 'material2-build-tools';
+import {createPackageBuildTasks} from '../package-tools';
 import {
-  cdkPackage,
   cdkExperimentalPackage,
-  examplesPackage,
+  cdkPackage,
+  googleMapsPackage,
   materialExperimentalPackage,
   materialPackage,
-  momentAdapterPackage
+  momentAdapterPackage,
+  youTubePlayerPackage
 } from './packages';
+
+import './tasks/ci';
+import './tasks/clean';
+import './tasks/unit-test';
 
 createPackageBuildTasks(cdkPackage);
 createPackageBuildTasks(cdkExperimentalPackage);
 createPackageBuildTasks(materialPackage);
 createPackageBuildTasks(materialExperimentalPackage);
-createPackageBuildTasks(examplesPackage, ['build-examples-module']);
 createPackageBuildTasks(momentAdapterPackage);
+createPackageBuildTasks(youTubePlayerPackage);
+createPackageBuildTasks(googleMapsPackage);
 
-import './tasks/aot';
-import './tasks/changelog';
-import './tasks/ci';
-import './tasks/clean';
-import './tasks/coverage';
-import './tasks/default';
-import './tasks/development';
-import './tasks/docs';
-import './tasks/e2e';
-import './tasks/example-module';
-import './tasks/lint';
-import './tasks/material-release';
-import './tasks/payload';
-import './tasks/publish';
-import './tasks/screenshots';
-import './tasks/unit-test';
-import './tasks/universal';
-import './tasks/validate-release';

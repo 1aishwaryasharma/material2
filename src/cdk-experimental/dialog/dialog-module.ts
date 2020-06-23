@@ -7,7 +7,6 @@
  */
 
 import {NgModule} from '@angular/core';
-import {CommonModule} from '@angular/common';
 import {OverlayModule} from '@angular/cdk/overlay';
 import {PortalModule} from '@angular/cdk/portal';
 import {A11yModule} from '@angular/cdk/a11y';
@@ -25,12 +24,14 @@ import {
 
 @NgModule({
   imports: [
-    CommonModule,
     OverlayModule,
     PortalModule,
     A11yModule,
   ],
   exports: [
+    // Re-export the PortalModule so that people extending the `CdkDialogContainer`
+    // don't have to remember to import it or be faced with an unhelpful error.
+    PortalModule,
     CdkDialogContainer,
   ],
   declarations: [

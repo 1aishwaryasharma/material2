@@ -26,14 +26,18 @@ import {Direction, Directionality} from './directionality';
 @Directive({
   selector: '[dir]',
   providers: [{provide: Directionality, useExisting: Dir}],
-  host: {'[dir]': 'dir'},
+  host: {'[attr.dir]': '_rawDir'},
   exportAs: 'dir',
 })
 export class Dir implements Directionality, AfterContentInit, OnDestroy {
-  _dir: Direction = 'ltr';
+  /** Normalized direction that accounts for invalid/unsupported values. */
+  private _dir: Direction = 'ltr';
 
   /** Whether the `value` has been set to its initial value. */
   private _isInitialized: boolean = false;
+
+  /** Direction as passed in by the consumer. */
+  _rawDir: string;
 
   /** Event emitted when the direction changes. */
   @Output('dirChange') change = new EventEmitter<Direction>();
@@ -41,9 +45,13 @@ export class Dir implements Directionality, AfterContentInit, OnDestroy {
   /** @docs-private */
   @Input()
   get dir(): Direction { return this._dir; }
-  set dir(v: Direction) {
+  set dir(value: Direction) {
     const old = this._dir;
-    this._dir = v;
+    const normalizedValue = value ? value.toLowerCase() : value;
+
+    this._rawDir = value;
+    this._dir = (normalizedValue === 'ltr' || normalizedValue === 'rtl') ? normalizedValue : 'ltr';
+
     if (old !== this._dir && this._isInitialized) {
       this.change.emit(this._dir);
     }

@@ -1,39 +1,50 @@
-package(default_visibility=["//visibility:public"])
-load("@angular//:index.bzl", "ng_module")
-load("@io_bazel_rules_sass//sass:sass.bzl", "sass_library", "sass_binary")
+load("//tools:defaults.bzl", "ng_module", "ng_test_library", "ng_web_test_suite", "sass_binary")
 
+package(default_visibility = ["//visibility:public"])
 
 ng_module(
-  name = "dialog",
-  srcs = glob(["**/*.ts"], exclude=["**/*.spec.ts"]),
-  module_name = "@angular/cdk-experimental/dialog",
-  assets = [":dialog_container_css"] + glob(["**/*.html"]),
-  deps = [
-    "//src/cdk/a11y",
-    "//src/cdk/bidi",
-    "//src/cdk/keycodes",
-    "//src/cdk/overlay",
-    "//src/cdk/portal",
-  ],
-  tsconfig = "//src/lib:tsconfig-build.json",
-)
-
-# TODO(jelbourn): replace this w/ sass_library when it supports acting like a filegroup
-filegroup(
-  name = "dialog_container_scss_partials",
-  srcs = glob(["**/_*.scss"]),
+    name = "dialog",
+    srcs = glob(
+        ["**/*.ts"],
+        exclude = ["**/*.spec.ts"],
+    ),
+    assets = [":dialog-container.css"] + glob(["**/*.html"]),
+    module_name = "@angular/cdk-experimental/dialog",
+    deps = [
+        "//src/cdk/a11y",
+        "//src/cdk/bidi",
+        "//src/cdk/keycodes",
+        "//src/cdk/overlay",
+        "//src/cdk/portal",
+        "@npm//@angular/animations",
+        "@npm//@angular/core",
+        "@npm//rxjs",
+    ],
 )
 
 sass_binary(
-  name = "dialog_container_scss",
-  src = "dialog-container.scss",
+    name = "dialog_container_scss",
+    src = "dialog-container.scss",
 )
 
-# TODO(jelbourn): remove this when sass_binary supports specifying an output filename and dir.
-# Copy the output of the sass_binary such that the filename and path match what we expect.
-genrule(
-  name = "dialog_container_css",
-  srcs = [":dialog_container_scss.css"],
-  outs = ["dialog-container.css"],
-  cmd = "cp $< $@",
+ng_test_library(
+    name = "unit_test_sources",
+    srcs = glob(
+        ["**/*.spec.ts"],
+        exclude = ["**/*.e2e.spec.ts"],
+    ),
+    deps = [
+        ":dialog",
+        "//src/cdk/bidi",
+        "//src/cdk/keycodes",
+        "//src/cdk/overlay",
+        "//src/cdk/testing/private",
+        "@npm//@angular/common",
+        "@npm//@angular/platform-browser",
+    ],
+)
+
+ng_web_test_suite(
+    name = "unit_tests",
+    deps = [":unit_test_sources"],
 )

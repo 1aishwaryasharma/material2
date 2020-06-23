@@ -8,11 +8,12 @@
 
 import {LOCALE_ID} from '@angular/core';
 import {async, inject, TestBed} from '@angular/core/testing';
-import {DateAdapter, DEC, FEB, JAN, MAR, MAT_DATE_LOCALE} from '@angular/material/core';
-import * as moment from 'moment';
+import {DateAdapter, MAT_DATE_LOCALE} from '@angular/material/core';
+import {DEC, FEB, JAN, MAR} from '@angular/material/testing';
 import {MomentDateModule} from './index';
-import {MomentDateAdapter} from './moment-date-adapter';
+import {MAT_MOMENT_DATE_ADAPTER_OPTIONS, MomentDateAdapter} from './moment-date-adapter';
 
+import * as moment from 'moment';
 
 describe('MomentDateAdapter', () => {
   let adapter: MomentDateAdapter;
@@ -65,7 +66,7 @@ describe('MomentDateAdapter', () => {
     ]);
   });
 
-  it('should get long month names', () => {
+  it('should get short month names', () => {
     expect(adapter.getMonthNames('short')).toEqual([
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ]);
@@ -92,10 +93,10 @@ describe('MomentDateAdapter', () => {
   });
 
   it('should get date names in a different locale', () => {
-    adapter.setLocale('ja-JP');
+    adapter.setLocale('ar-AE');
     expect(adapter.getDateNames()).toEqual([
-      '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17',
-      '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31'
+      '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠', '١١', '١٢', '١٣', '١٤', '١٥', '١٦',
+      '١٧', '١٨', '١٩', '٢٠', '٢١', '٢٢', '٢٣', '٢٤', '٢٥', '٢٦', '٢٧', '٢٨', '٢٩', '٣٠', '٣١'
     ]);
   });
 
@@ -129,8 +130,8 @@ describe('MomentDateAdapter', () => {
   });
 
   it('should get year name in a different locale', () => {
-    adapter.setLocale('ja-JP');
-    expect(adapter.getYearName(moment([2017,  JAN,  1]))).toBe('2017');
+    adapter.setLocale('ar-AE');
+    expect(adapter.getYearName(moment([2017,  JAN,  1]))).toBe('٢٠١٧');
   });
 
   it('should get first day of week', () => {
@@ -143,7 +144,8 @@ describe('MomentDateAdapter', () => {
   });
 
   it('should create Moment date', () => {
-    expect(adapter.createDate(2017, JAN, 1).format()).toEqual(moment([2017,  JAN,  1]).format());
+    expect(adapter.createDate(2017, JAN, 1).format())
+      .toEqual(moment([2017,  JAN,  1]).format());
   });
 
   it('should not create Moment date with month over/under-flow', () => {
@@ -162,6 +164,10 @@ describe('MomentDateAdapter', () => {
     expect(adapter.createDate(50, JAN, 1).year()).toBe(50);
     expect(adapter.createDate(99, JAN, 1).year()).toBe(99);
     expect(adapter.createDate(100, JAN, 1).year()).toBe(100);
+  });
+
+  it('should not create Moment date in utc format', () => {
+    expect(adapter.createDate(2017, JAN, 5).isUTC()).toEqual(false);
   });
 
   it("should get today's date", () => {
@@ -327,6 +333,19 @@ describe('MomentDateAdapter', () => {
     assertValidDate(adapter.deserialize(moment.invalid()), false);
   });
 
+  it('should clone the date when deserializing a Moment date', () => {
+    let date = moment([2017, JAN, 1]);
+    expect(adapter.deserialize(date)!.format()).toEqual(date.format());
+    expect(adapter.deserialize(date)).not.toBe(date);
+  });
+
+  it('should deserialize dates with the correct locale', () => {
+    adapter.setLocale('ja');
+    expect(adapter.deserialize('1985-04-12T23:20:50.52Z')!.locale()).toBe('ja');
+    expect(adapter.deserialize(new Date())!.locale()).toBe('ja');
+    expect(adapter.deserialize(moment())!.locale()).toBe('ja');
+  });
+
   it('setLocale should not modify global moment locale', () => {
     expect(moment.locale()).toBe('en');
     adapter.setLocale('ja-JP');
@@ -406,5 +425,77 @@ describe('MomentDateAdapter with LOCALE_ID override', () => {
 
   it('should take the default locale id from the LOCALE_ID injection token', () => {
     expect(adapter.format(moment([2017,  JAN,  2]), 'll')).toEqual('2 janv. 2017');
+  });
+});
+
+describe('MomentDateAdapter with MAT_MOMENT_DATE_ADAPTER_OPTIONS override', () => {
+  let adapter: MomentDateAdapter;
+
+  beforeEach(async(() => {
+    TestBed.configureTestingModule({
+      imports: [MomentDateModule],
+      providers: [{
+        provide: MAT_MOMENT_DATE_ADAPTER_OPTIONS,
+        useValue: {useUtc: true}
+      }]
+    }).compileComponents();
+  }));
+
+  beforeEach(inject([DateAdapter], (d: MomentDateAdapter) => {
+    adapter = d;
+  }));
+
+  describe('use UTC', () => {
+    it('should create Moment date in UTC', () => {
+      expect(adapter.createDate(2017, JAN, 5).isUtc()).toBe(true);
+    });
+
+    it('should create today in UTC', () => {
+      expect(adapter.today().isUtc()).toBe(true);
+    });
+
+    it('should parse dates to UTC', () => {
+      expect(adapter.parse('1/2/2017', 'MM/DD/YYYY')!.isUtc()).toBe(true);
+    });
+
+    it('should return UTC date when deserializing', () => {
+      expect(adapter.deserialize('1985-04-12T23:20:50.52Z')!.isUtc()).toBe(true);
+    });
+  });
+
+  describe('strict mode', () => {
+
+    beforeEach(async(() => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        imports: [MomentDateModule],
+        providers: [
+          {
+            provide: MAT_MOMENT_DATE_ADAPTER_OPTIONS,
+            useValue: {
+              strict: true,
+            },
+          },
+        ]
+      }).compileComponents();
+    }));
+
+    beforeEach(inject([DateAdapter], (d: MomentDateAdapter) => {
+      adapter = d;
+    }));
+
+    it('should detect valid strings according to given format', () => {
+      expect(adapter.parse('1/2/2017', 'D/M/YYYY')!.format('l'))
+        .toEqual(moment([2017,  FEB,  1]).format('l'));
+      expect(adapter.parse('February 1, 2017', 'MMMM D, YYYY')!.format('l'))
+        .toEqual(moment([2017,  FEB,  1]).format('l'));
+    });
+
+    it('should detect invalid strings according to given format', () => {
+      expect(adapter.parse('2017-01-01', 'MM/DD/YYYY')!.isValid()).toBe(false);
+      expect(adapter.parse('1/2/2017', 'MM/DD/YYYY')!.isValid()).toBe(false);
+      expect(adapter.parse('Jan 5, 2017', 'MMMM D, YYYY')!.isValid()).toBe(false);
+    });
+
   });
 });

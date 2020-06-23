@@ -2,13 +2,9 @@
   "name": "@angular/cdk",
   "version": "0.0.0-PLACEHOLDER",
   "description": "Angular Material Component Development Kit",
-  "main": "./bundles/cdk.umd.js",
-  "module": "./esm5/cdk.es5.js",
-  "es2015": "./esm2015/cdk.js",
-  "typings": "./cdk.d.ts",
   "repository": {
     "type": "git",
-    "url": "https://github.com/angular/material2.git"
+    "url": "https://github.com/angular/components.git"
   },
   "keywords": [
     "angular",
@@ -19,22 +15,25 @@
   ],
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/angular/material2/issues"
+    "url": "https://github.com/angular/components/issues"
   },
-  "homepage": "https://github.com/angular/material2#readme",
+  "homepage": "https://github.com/angular/components#readme",
   "peerDependencies": {
     "@angular/core": "0.0.0-NG",
     "@angular/common": "0.0.0-NG"
   },
   "dependencies": {
-    "tslib": "^1.7.1"
+    "tslib": "0.0.0-TSLIB"
   },
+  "optionalDependencies": {
+    "parse5": "^5.0.0"
+  },
+  "schematics": "./schematics/collection.json",
   "ng-update": {
-    "packageGroup": [
-      "@angular/material",
-      "@angular/cdk",
-      "@angular/material-moment-adapter"
-    ]
+    "migrations": "./schematics/migration.json"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "publishConfig":{
+    "registry":"https://wombat-dressing-room.appspot.com"
+  }
 }

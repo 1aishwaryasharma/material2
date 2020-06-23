@@ -7,18 +7,11 @@
  */
 
 import {Platform} from '@angular/cdk/platform';
-import {
-  ElementRef,
-  Injectable,
-  NgZone,
-  OnDestroy,
-  Optional,
-  SkipSelf,
-} from '@angular/core';
-import {fromEvent, of as observableOf, Subject, Subscription, Observable} from 'rxjs';
+import {ElementRef, Injectable, NgZone, OnDestroy, Optional, Inject} from '@angular/core';
+import {fromEvent, of as observableOf, Subject, Subscription, Observable, Observer} from 'rxjs';
 import {auditTime, filter} from 'rxjs/operators';
 import {CdkScrollable} from './scrollable';
-
+import {DOCUMENT} from '@angular/common';
 
 /** Time in ms to throttle the scrolling events by default. */
 export const DEFAULT_SCROLL_TIME = 20;
@@ -29,7 +22,15 @@ export const DEFAULT_SCROLL_TIME = 20;
  */
 @Injectable({providedIn: 'root'})
 export class ScrollDispatcher implements OnDestroy {
-  constructor(private _ngZone: NgZone, private _platform: Platform) { }
+  /** Used to reference correct document/window */
+  protected _document?: Document;
+
+  constructor(private _ngZone: NgZone,
+              private _platform: Platform,
+              /** @breaking-change 11.0.0 make document required */
+              @Optional() @Inject(DOCUMENT) document?: any) {
+    this._document = document;
+  }
 
   /** Subject for notifying that a registered scrollable reference element has been scrolled. */
   private _scrolled = new Subject<CdkScrollable|void>();
@@ -52,10 +53,10 @@ export class ScrollDispatcher implements OnDestroy {
    * @param scrollable Scrollable instance to be registered.
    */
   register(scrollable: CdkScrollable): void {
-    const scrollSubscription = scrollable.elementScrolled()
-        .subscribe(() => this._scrolled.next(scrollable));
-
-    this.scrollContainers.set(scrollable, scrollSubscription);
+    if (!this.scrollContainers.has(scrollable)) {
+      this.scrollContainers.set(scrollable, scrollable.elementScrolled()
+          .subscribe(() => this._scrolled.next(scrollable)));
+    }
   }
 
   /**
@@ -82,7 +83,11 @@ export class ScrollDispatcher implements OnDestroy {
    * to run the callback using `NgZone.run`.
    */
   scrolled(auditTimeInMs: number = DEFAULT_SCROLL_TIME): Observable<CdkScrollable|void> {
-    return this._platform.isBrowser ? Observable.create(observer => {
+    if (!this._platform.isBrowser) {
+      return observableOf<void>();
+    }
+
+    return new Observable((observer: Observer<CdkScrollable|void>) => {
       if (!this._globalSubscription) {
         this._addGlobalListener();
       }
@@ -103,7 +108,7 @@ export class ScrollDispatcher implements OnDestroy {
           this._removeGlobalListener();
         }
       };
-    }) : observableOf<void>();
+    });
   }
 
   ngOnDestroy() {
@@ -139,16 +144,27 @@ export class ScrollDispatcher implements OnDestroy {
     return scrollingContainers;
   }
 
+  /** Access injected document if available or fallback to global document reference */
+  private _getDocument(): Document {
+    return this._document || document;
+  }
+
+  /** Use defaultView of injected document if available or fallback to global window reference */
+  private _getWindow(): Window {
+    const doc = this._getDocument();
+    return doc.defaultView || window;
+  }
+
   /** Returns true if the element is contained within the provided Scrollable. */
   private _scrollableContainsElement(scrollable: CdkScrollable, elementRef: ElementRef): boolean {
-    let element = elementRef.nativeElement;
+    let element: HTMLElement | null = elementRef.nativeElement;
     let scrollableElement = scrollable.getElementRef().nativeElement;
 
     // Traverse through the element parents until we reach null, checking if any of the elements
     // are the scrollable's element.
     do {
       if (element == scrollableElement) { return true; }
-    } while (element = element.parentElement);
+    } while (element = element!.parentElement);
 
     return false;
   }
@@ -156,6 +172,7 @@ export class ScrollDispatcher implements OnDestroy {
   /** Sets up the global scroll listeners. */
   private _addGlobalListener() {
     this._globalSubscription = this._ngZone.runOutsideAngular(() => {
+      const window = this._getWindow();
       return fromEvent(window.document, 'scroll').subscribe(() => this._scrolled.next());
     });
   }
@@ -168,18 +185,3 @@ export class ScrollDispatcher implements OnDestroy {
     }
   }
 }
-
-
-/** @docs-private @deprecated @deletion-target 7.0.0 */
-export function SCROLL_DISPATCHER_PROVIDER_FACTORY(
-    parentDispatcher: ScrollDispatcher, ngZone: NgZone, platform: Platform) {
-  return parentDispatcher || new ScrollDispatcher(ngZone, platform);
-}
-
-/** @docs-private @deprecated @deletion-target 7.0.0 */
-export const SCROLL_DISPATCHER_PROVIDER = {
-  // If there is already a ScrollDispatcher available, use that. Otherwise, provide a new one.
-  provide: ScrollDispatcher,
-  deps: [[new Optional(), new SkipSelf(), ScrollDispatcher], NgZone, Platform],
-  useFactory: SCROLL_DISPATCHER_PROVIDER_FACTORY
-};

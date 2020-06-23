@@ -55,7 +55,7 @@ export class InteractivityChecker {
    * @returns Whether the element is tabbable.
    */
   isTabbable(element: HTMLElement): boolean {
-    // Nothing is tabbable on the the server 😎
+    // Nothing is tabbable on the server 😎
     if (!this._platform.isBrowser) {
       return false;
     }
@@ -150,7 +150,7 @@ export class InteractivityChecker {
 function getFrameElement(window: Window) {
   try {
     return window.frameElement as HTMLElement;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -252,5 +252,6 @@ function isPotentiallyFocusable(element: HTMLElement): boolean {
 
 /** Gets the parent window of a DOM node with regards of being inside of an iframe. */
 function getWindow(node: HTMLElement): Window {
-  return node.ownerDocument.defaultView || window;
+  // ownerDocument is null if `node` itself *is* a document.
+  return node.ownerDocument && node.ownerDocument.defaultView || window;
 }

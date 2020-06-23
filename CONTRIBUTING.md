@@ -70,13 +70,13 @@ chances of your issue being dealt with quickly:
 * **Suggest a Fix** - if you can't fix the bug yourself, perhaps you can point to what might be
     causing the problem (line of code or commit)
 
-You can file new issues by providing the above information [here](https://github.com/angular/material2/issues/new).
+You can file new issues by providing the above information [here](https://github.com/angular/components/issues/new).
 
 
 ### <a name="submit-pr"></a> Submitting a Pull Request (PR)
 Before you submit your Pull Request (PR) consider the following guidelines:
 
-* Search [GitHub](https://github.com/angular/material2/pulls) for an open or closed PR
+* Search [GitHub](https://github.com/angular/components/pulls) for an open or closed PR
   that relates to your submission. You don't want to duplicate effort.
 * Please sign our [Contributor License Agreement (CLA)](#cla) before sending PRs.
   We cannot accept code without this.
@@ -106,7 +106,7 @@ Before you submit your Pull Request (PR) consider the following guidelines:
     git push my-fork my-fix-branch
     ```
 
-* In GitHub, send a pull request to `material2:master`.
+* In GitHub, send a pull request to `components:master`.
 * If we suggest changes then:
   * Make the required updates.
   * Re-run the Angular Material test suites to ensure tests are still passing.
@@ -166,20 +166,36 @@ we use the git commit messages to **generate the Angular Material change log**.
 
 ### Commit Message Format
 Each commit message consists of a **header**, a **body** and a **footer**.  The header has a special
-format that includes a **type**, a **scope** and a **subject**:
+format that includes a **type**, a **package**, a **scope** and a **subject**:
 
 ```
-<type>(<scope>): <subject>
+<type>(<package>/<scope>): <subject>
 <BLANK LINE>
 <body>
 <BLANK LINE>
 <footer>
 ```
 
-The **header** is mandatory and the **scope** of the header is optional.
+The **header** is mandatory. For changes which are shown in the changelog (`fix`, `feat`,
+`perf` and `revert`), the **package** and **scope** fields are mandatory.
+
+The `package` and `scope` fields can be omitted if the change does not affect a specific
+package and is not displayed in the changelog (e.g. build changes or refactorings).
 
 Any line of the commit message cannot be longer 100 characters! This allows the message to be easier
 to read on GitHub as well as in various git tools.
+
+Example:
+
+```
+fix(material/button): unable to disable button through binding
+
+Fixes a bug in the Angular Material `button` component where buttons
+cannot be disabled through an binding. This is because the `disabled`
+input did not set the `.mat-button-disabled` class on the host element.
+
+Fixes #1234 
+```
 
 ### Revert
 If the commit reverts a previous commit, it should begin with `revert: `, followed by the header of
@@ -201,6 +217,10 @@ Must be one of the following:
             (example scopes: gulp, broccoli, npm)
 * **chore**: Other changes that don't modify `src` or `test` files
 
+### Package
+The commit message should specify which package is affected by the change. For example:
+`material`, `cdk-experimental`, etc.
+
 ### Scope
 The scope could be anything specifying place of the commit change. For example
 `datepicker`, `dialog`, etc.
@@ -217,11 +237,14 @@ Just as in the **subject**, use the imperative, present tense: "change" not "cha
 The body should include the motivation for the change and contrast this with previous behavior.
 
 ### Footer
-The footer should contain any information about **Breaking Changes** and is also the place to
-reference GitHub issues that this commit **Closes**.
+The footer should contain any information about **Breaking Changes** or **Deprecations** and
+is also the place to reference GitHub issues that this commit **Closes**.
 
 **Breaking Changes** should start with the word `BREAKING CHANGE:` with a space or two newlines.
 The rest of the commit message is then used for this.
+
+**Deprecations** should start with the word `DEPRECATED:`. The rest of the commit message will be
+used as content for the note.
 
 A detailed explanation can be found in this [document][commit-message-format].
 
@@ -239,9 +262,9 @@ changes to be accepted, the CLA must be signed. It's a quick process, we promise
 [coc]: https://github.com/angular/code-of-conduct/blob/master/CODE_OF_CONDUCT.md
 [commit-message-format]: https://docs.google.com/document/d/1QrDFcIiPjSLDn3EL15IJygNPiHORgU1_OOAqWjiDU5Y/preview
 [corporate-cla]: http://code.google.com/legal/corporate-cla-v1.0.html
-[dev-doc]: https://github.com/angular/material2/blob/master/DEV_ENVIRONMENT.md
-[github]: https://github.com/angular/material2
-[gitter]: https://gitter.im/angular/material2
+[dev-doc]: https://github.com/angular/components/blob/master/DEV_ENVIRONMENT.md
+[github]: https://github.com/angular/components
+[gitter]: https://gitter.im/angular/components
 [individual-cla]: http://code.google.com/legal/individual-cla-v1.0.html
 [js-style-guide]: https://google.github.io/styleguide/jsguide.html
 [codepen]: http://codepen.io/
